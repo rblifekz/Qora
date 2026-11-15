@@ -1,6 +1,6 @@
 import React from 'react';
 import {AbsoluteFill, Audio, Sequence, staticFile, interpolate, useCurrentFrame} from 'remotion';
-import {C, FPS, VOICE_OFFSET, Grain} from './lib';
+import {C, FPS, VOICE_OFFSET, Grain, FONT_BY_LANG} from './lib';
 import {LANG, Lang, warp} from './lang';
 import {Captions} from './Captions';
 import {Sfx} from './Sfx';
@@ -32,7 +32,7 @@ const scenes = [
 export const Video: React.FC<{lang: Lang}> = ({lang}) => {
   LANG.current = lang;
   return (
-  <AbsoluteFill style={{background: C.bg}}>
+  <AbsoluteFill style={{background: C.bg, ['--ff' as any]: FONT_BY_LANG[lang]}}>
     {scenes.map(([Comp, s, e], i) => (
       <Sequence key={i} from={Math.round(warp(s) * FPS)} durationInFrames={Math.round(warp(e) * FPS) - Math.round(warp(s) * FPS)}>
         <FadeOut dur={Math.round(warp(e) * FPS) - Math.round(warp(s) * FPS)} on={i >= 2 && i <= 4}>

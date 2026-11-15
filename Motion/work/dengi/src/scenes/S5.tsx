@@ -142,7 +142,7 @@ export const S5: React.FC = () => {
               </div>
               <div
                 style={{
-                  fontSize: 160,
+                  fontSize: LANG.current === 'kk' ? 132 : 160,
                   fontWeight: 800,
                   color: C.red,
                   letterSpacing: -6,

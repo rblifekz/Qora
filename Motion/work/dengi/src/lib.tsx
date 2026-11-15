@@ -11,25 +11,33 @@ import {
 import {continueRender, delayRender, staticFile} from 'remotion';
 import {warp, TXT, LANG} from './lang';
 
-// Manrope (SIL OFL) — локальные файлы, кириллица + казахские буквы
-export const fontFamily = 'ManropeLocal';
-const FONT_FILES: [string, string][] = [
-  ['manrope-latin-wght-normal.woff2', 'U+0000-00FF,U+2000-206F,U+20AC,U+2122,U+2212'],
-  ['manrope-latin-ext-wght-normal.woff2', 'U+0100-024F,U+20A0-20AB,U+20AD-20C0'],
-  ['manrope-cyrillic-wght-normal.woff2', 'U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116'],
-  ['manrope-cyrillic-ext-wght-normal.woff2', 'U+0460-052F,U+1C80-1C8A,U+20B4,U+2DE0-2DFF,U+A640-A69F,U+FE2E-FE2F'],
+// Шрифты (SIL OFL), локальные файлы. Manrope — RU; Montserrat — KK (в Manrope нет Ә Ғ Қ Ң Ұ).
+// Семейство выбирается CSS-переменной --ff, которую ставит Video по языку.
+export const fontFamily = "var(--ff, 'ManropeLocal'), sans-serif";
+export const FONT_BY_LANG = {ru: "'ManropeLocal'", kk: "'MontserratLocal'"};
+const RANGES: Record<string, string> = {
+  latin: 'U+0000-00FF,U+2000-206F,U+20AC,U+2122,U+2212',
+  'latin-ext': 'U+0100-024F,U+20A0-20AB,U+20AD-20C0',
+  cyrillic: 'U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116',
+  'cyrillic-ext': 'U+0460-052F,U+1C80-1C8A,U+20B4,U+2DE0-2DFF,U+A640-A69F,U+FE2E-FE2F',
+};
+const FACES: [string, string][] = [
+  ['ManropeLocal', 'manrope'],
+  ['MontserratLocal', 'montserrat'],
 ];
-if (typeof document !== 'undefined' && !(window as any).__manrope) {
-  (window as any).__manrope = true;
-  const h = delayRender('Manrope');
+if (typeof document !== 'undefined' && !(window as any).__fonts) {
+  (window as any).__fonts = true;
+  const h = delayRender('fonts');
   Promise.all(
-    FONT_FILES.map(([f, range]) => {
-      const ff = new FontFace(fontFamily, `url(${staticFile('fonts/' + f)}) format('woff2')`, {
-        weight: '200 800',
-        unicodeRange: range,
-      });
-      return ff.load().then((l) => document.fonts.add(l));
-    }),
+    FACES.flatMap(([family, file]) =>
+      Object.entries(RANGES).map(([sub, range]) => {
+        const ff = new FontFace(family, `url(${staticFile(`fonts/${file}-${sub}-wght-normal.woff2`)}) format('woff2')`, {
+          weight: '100 900',
+          unicodeRange: range,
+        });
+        return ff.load().then((l) => document.fonts.add(l));
+      }),
+    ),
   ).then(() => continueRender(h));
 }
 
@@ -100,7 +108,9 @@ export const Big: React.FC<{
   size?: number;
   color?: string;
   style?: React.CSSProperties;
-}> = ({children, size = 150, color = C.white, style}) => (
+}> = ({children, size: size0 = 150, color = C.white, style}) => {
+  const size = size0 * (LANG.current === 'kk' ? 0.9 : 1); // Montserrat шире Manrope
+  return (
   <div
     style={{
       fontFamily,
@@ -117,7 +127,8 @@ export const Big: React.FC<{
   >
     {children}
   </div>
-);
+  );
+};
 
 /** медленный наезд камеры на всю сцену */
 export const Cam: React.FC<{dur: number; from?: number; to?: number; children: React.ReactNode}> = ({

@@ -30,7 +30,7 @@ const Tag: React.FC<{price: number; up: number}> = ({price, up}) => (
       <div style={{fontSize: 34, fontWeight: 700, color: '#77746C', letterSpacing: 3}}>{TXT[LANG.current].tagPrice}</div>
       <div
         style={{
-          fontSize: 130,
+          fontSize: LANG.current === 'kk' ? 108 : 130,
           fontWeight: 800,
           color: up > 0.02 ? '#C8352F' : '#1A1A1A',
           letterSpacing: -5,
