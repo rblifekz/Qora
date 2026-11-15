@@ -44,26 +44,27 @@ export const S4: React.FC = () => {
   const phoneS = usePop(phoneAt, {damping: 16});
   const titleOut = interpolate(frame, [stackAt - 6, stackAt], [1, 0], clamp);
 
-  // стопка купюр: 6 шт, каждая улетает на своё слово
+  // стопка купюр: 6 шт; верхняя улетает на каждое слово, нижняя (i=0) остаётся
+  const flown = counts.filter((c) => frame >= c).length;
   const stack = new Array(6).fill(0).map((_, i) => {
-    const flyAt = counts[i];
+    const flyAt = i > 0 ? counts[5 - i] : undefined;
     const k = flyAt !== undefined ? frame - flyAt : -1;
-    const p = k >= 0 ? interpolate(k, [0, 12], [0, 1], {...clamp, easing: easeIn}) : 0;
+    const p = k >= 0 ? interpolate(k, [0, 10], [0, 1], {...clamp, easing: easeIn}) : 0;
     const dir = i % 2 === 0 ? -1 : 1;
-    const baseY = 600 - i * 16;
-    const lift = interpolate(frame, [phoneAt, phoneAt + 10], [0, -200], clamp);
+    const baseY = 720 - i * 22;
     if (p >= 1) return null;
-    const last = i === 5;
+    const last = i === 0;
     if (last && frame >= tap) return null;
+    const y = last ? interpolate(frame, [phoneAt, phoneAt + 10], [baseY, BILL_Y], {...clamp, easing: ease}) : baseY;
     return (
       <div
         key={i}
         style={{
           position: 'absolute',
-          left: BILL_X + p * dir * 900,
-          top: (last ? BILL_Y + 200 + lift : baseY) - p * 180,
-          transform: `rotate(${(random(`r${i}`) - 0.5) * 6 + p * dir * 30}deg)`,
-          opacity: 1 - p,
+          left: BILL_X + p * dir * 950,
+          top: y - p * 260,
+          transform: `rotate(${(random(`r${i}`) - 0.5) * 7 + p * dir * 40}deg) scale(${1 + p * 0.15})`,
+          opacity: 1 - p * 0.7,
           zIndex: i,
         }}
       >
@@ -71,6 +72,30 @@ export const S4: React.FC = () => {
       </div>
     );
   });
+  const lastFly = counts.filter((c) => frame >= c).pop();
+  const cntPunch = lastFly !== undefined ? interpolate(frame - lastFly, [0, 5], [1.18, 1], clamp) : 1;
+  const counter =
+    frame >= stackAt && frame < phoneAt ? (
+      <div
+        style={{
+          position: 'absolute',
+          top: 1080,
+          left: 0,
+          right: 0,
+          textAlign: 'center',
+          fontFamily,
+          fontWeight: 800,
+          fontSize: 150,
+          letterSpacing: -5,
+          color: flown ? C.white : C.green,
+          transform: `scale(${cntPunch})`,
+          fontVariantNumeric: 'tabular-nums',
+          opacity: interpolate(frame, [phoneAt - 6, phoneAt], [1, 0], clamp),
+        }}
+      >
+        {(60 - flown * 10).toString()}&nbsp;000&nbsp;₸
+      </div>
+    ) : null;
 
   // распад последней купюры на пиксели
   const particles =
@@ -78,8 +103,8 @@ export const S4: React.FC = () => {
       ? new Array(COLS * ROWS).fill(0).map((_, idx) => {
           const cx = idx % COLS;
           const cy = Math.floor(idx / COLS);
-          const delay = (cx / COLS) * 9 + random(`pd${idx}`) * 6;
-          const p = interpolate(frame - tap - delay, [0, 16], [0, 1], {...clamp, easing: easeIn});
+          const delay = (cx / COLS) * 6 + random(`pd${idx}`) * 4;
+          const p = interpolate(frame - tap - delay, [0, 12], [0, 1], {...clamp, easing: easeIn});
           const sw = BILL_W / COLS;
           const sh = BILL_H / ROWS;
           const x0 = BILL_X + cx * sw;
@@ -213,6 +238,7 @@ export const S4: React.FC = () => {
                 </Phone>
               </div>
             )}
+            {counter}
             {stack}
             {particles}
           </Pop>
