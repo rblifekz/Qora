@@ -21,7 +21,7 @@ export const S6: React.FC = () => {
         style={{background: `radial-gradient(circle at 50% 70%, ${C.green}26, transparent 55%)`, opacity: interpolate(frame, [seeAt, seeAt + 10], [0.3, 1], clamp)}}
       />
       <Cam dur={T(S6_END)} to={1.06}>
-        <Pop start={T(36.42)} style={{position: 'absolute', top: 290, left: 0, right: 0}}>
+        <Pop start={T(36.1)} style={{position: 'absolute', top: 290, left: 0, right: 0}}>
           <Big size={150}>
             <span style={{color: C.green}}>1</span> неделя
           </Big>

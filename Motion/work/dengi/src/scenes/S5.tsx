@@ -49,7 +49,7 @@ export const S5: React.FC = () => {
     <ChapterBg fly>
       <Cam dur={T(S5_END)} to={1.03}>
         <div style={{opacity: headOut}}>
-          <ChapterHead n={3} title="Мелочь" titleAt={T(25.95)} fly />
+          <ChapterHead n={3} title="Мелочь" titleAt={T(25.4)} fly />
         </div>
 
         <div

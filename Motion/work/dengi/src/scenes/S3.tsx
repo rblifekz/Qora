@@ -62,7 +62,7 @@ export const S3: React.FC = () => {
     <ChapterBg>
       <Cam dur={T(S3_END)} to={1.05}>
         <div style={{position: 'absolute', inset: 0, transform: `translate(${shake.x}px, ${shake.y}px)`}}>
-          <ChapterHead n={1} title="Цены" titleAt={T(9.0)} />
+          <ChapterHead n={1} title="Цены" titleAt={T(8.55)} />
 
           {/* ценник */}
           {frame >= tagIn && (

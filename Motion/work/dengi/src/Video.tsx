@@ -2,6 +2,7 @@ import React from 'react';
 import {AbsoluteFill, Audio, Sequence, staticFile, interpolate, useCurrentFrame} from 'remotion';
 import {C, FPS, VOICE_OFFSET, Grain} from './lib';
 import {Captions} from './Captions';
+import {Sfx} from './Sfx';
 import {S1, S1_START, S1_END} from './scenes/S1';
 import {S2, S2_START, S2_END} from './scenes/S2';
 import {S3, S3_START, S3_END} from './scenes/S3';
@@ -38,6 +39,7 @@ export const Video: React.FC = () => (
     ))}
     <Captions />
     <Grain />
+    <Sfx />
     <Sequence from={Math.round(VOICE_OFFSET * FPS)}>
       <Audio src={staticFile('voice.mp3')} />
     </Sequence>

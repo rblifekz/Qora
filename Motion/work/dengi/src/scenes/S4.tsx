@@ -141,8 +141,8 @@ export const S4: React.FC = () => {
       <Cam dur={T(S4_END)} to={1.05}>
         <div style={{opacity: titleOut}}>
           <ChapterHead n={2} title="" titleAt={9999} fly />
-          {frame >= T(16.45) && (
-            <Pop start={T(16.45)} style={{position: 'absolute', top: 440, left: 0, right: 0}}>
+          {frame >= T(15.75) && (
+            <Pop start={T(15.75)} style={{position: 'absolute', top: 440, left: 0, right: 0}}>
               <Dissolve text="НЕВИДИМЫЕ" start={T(17.3)} />
               <div style={{marginTop: 30}}>
                 <Big size={70} color={C.gray}>
