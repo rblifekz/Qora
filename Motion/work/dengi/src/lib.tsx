@@ -11,10 +11,11 @@ import {
 import {continueRender, delayRender, staticFile} from 'remotion';
 import {warp, TXT, LANG} from './lang';
 
-// Шрифты (SIL OFL), локальные файлы. Manrope — RU; Montserrat — KK (в Manrope нет Ә Ғ Қ Ң Ұ).
+// Шрифты (SIL OFL), локальные файлы. Manrope — RU; Golos Text — KK (в Manrope нет Ә Ғ Қ Ң Ұ,
+// а в Montserrat у Қ Ң тонкие хвостики; в Golos казахские буквы той же толщины, что и остальные).
 // Семейство выбирается CSS-переменной --ff, которую ставит Video по языку.
 export const fontFamily = "var(--ff, 'ManropeLocal'), sans-serif";
-export const FONT_BY_LANG = {ru: "'ManropeLocal'", kk: "'MontserratLocal'"};
+export const FONT_BY_LANG = {ru: "'ManropeLocal'", kk: "'GolosLocal'"};
 const RANGES: Record<string, string> = {
   latin: 'U+0000-00FF,U+2000-206F,U+20AC,U+2122,U+2212',
   'latin-ext': 'U+0100-024F,U+20A0-20AB,U+20AD-20C0',
@@ -23,7 +24,7 @@ const RANGES: Record<string, string> = {
 };
 const FACES: [string, string][] = [
   ['ManropeLocal', 'manrope'],
-  ['MontserratLocal', 'montserrat'],
+  ['GolosLocal', 'golos-text'],
 ];
 if (typeof document !== 'undefined' && !(window as any).__fonts) {
   (window as any).__fonts = true;
@@ -109,7 +110,7 @@ export const Big: React.FC<{
   color?: string;
   style?: React.CSSProperties;
 }> = ({children, size: size0 = 150, color = C.white, style}) => {
-  const size = size0 * (LANG.current === 'kk' ? 0.9 : 1); // Montserrat шире Manrope
+  const size = size0 * (LANG.current === 'kk' ? 0.94 : 1); // казахские слова длиннее
   return (
   <div
     style={{
