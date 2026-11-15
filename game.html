@@ -1,0 +1,1537 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Симулятор акима</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Unbounded:wght@500;700&display=swap">
+<style>
+/* Layout: one phone-height column — HUD on top, city plan in the middle, build dock at the bottom.
+   Single committed look: night-shift city control room around a daylight steppe map. */
+:root {
+  --bg: #111b21;
+  --panel: #18262e;
+  --panel-2: #20323c;
+  --line: #2d4450;
+  --text: #e7ede9;
+  --muted: #8ea2a5;
+  --sky: #3bb4d0;
+  --sun: #e8b84a;
+  --good: #6cc489;
+  --warn: #e6a440;
+  --bad: #e25a4f;
+  --font-display: "Unbounded", "Golos Text", system-ui, sans-serif;
+  --font-body: "Golos Text", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: dark;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; }
+html { height: 100%; box-sizing: border-box; background: var(--bg); }
+body {
+  height: 100%; margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.4 var(--font-body); -webkit-tap-highlight-color: transparent;
+  overflow: hidden; user-select: none; -webkit-user-select: none;
+}
+[hidden] { display: none !important; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--sky); outline-offset: 2px; }
+
+#app {
+  height: 100%; max-width: 560px; margin: 0 auto; display: flex; flex-direction: column;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* HUD */
+#hud { padding-block: 10px 8px; display: grid; gap: 8px; }
+.hud-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.who { min-width: 0; }
+.city { font: 700 17px/1.15 var(--font-display); letter-spacing: .01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sub { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.time { display: grid; justify-items: end; gap: 4px; flex: none; }
+#dateLbl { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.speeds { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 2px; }
+.speeds button { min-width: 36px; height: 28px; border-radius: 7px; font-size: 12px; font-weight: 600; color: var(--muted); display: grid; place-items: center; }
+.speeds button[aria-pressed="true"] { background: var(--panel-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--sky); }
+.speeds svg { width: 12px; height: 12px; fill: currentColor; }
+
+.chips { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.chip { text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px 7px; display: grid; gap: 2px; min-width: 0; }
+.chip .k { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip .v { font: 600 14px/1.1 var(--font-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chip .v small { font: 500 10px var(--font-body); color: var(--muted); }
+.bar { height: 3px; background: var(--panel-2); border-radius: 2px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 50%; background: var(--good); border-radius: 2px; transition: width .4s; }
+.chip.alarm { border-color: var(--bad); animation: pulse 1.2s infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 3px rgba(226, 90, 79, .25); } }
+#riskPill { justify-self: start; font-size: 11px; font-weight: 600; color: var(--bad); background: rgba(226, 90, 79, .12); border: 1px solid rgba(226, 90, 79, .4); padding: 2px 8px; border-radius: 99px; }
+
+/* Map */
+#mapWrap { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+#map { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: block; touch-action: manipulation; border-radius: 6px; }
+#toasts { position: absolute; top: 6px; left: 0; right: 0; display: grid; justify-items: center; gap: 6px; pointer-events: none; z-index: 5; }
+.toast { max-width: 92%; background: rgba(17, 27, 33, .92); border: 1px solid var(--line); padding: 7px 12px; border-radius: 10px; font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,.35); animation: tin .25s ease-out; }
+.toast.bad { border-color: var(--bad); }
+.toast.good { border-color: var(--good); }
+@keyframes tin { from { opacity: 0; transform: translateY(-6px); } }
+
+/* Dock */
+#dock { padding-block: 6px 10px; display: grid; gap: 6px; }
+#toolHint { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--panel-2); border-radius: 10px; padding: 6px 6px 6px 12px; font-size: 12px; }
+#toolHint span { min-width: 0; }
+#toolHint b { color: var(--sky); font-weight: 600; }
+#toolHint button { flex: none; padding: 5px 10px; border-radius: 7px; background: var(--panel); border: 1px solid var(--line); font-size: 12px; }
+.tabs { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs button { flex: none; padding: 6px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.tabs button[aria-selected="true"] { color: var(--text); background: var(--panel); box-shadow: inset 0 -2px 0 var(--sky); }
+.items { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.items::-webkit-scrollbar { display: none; }
+.item { flex: none; width: 86px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 4px 4px 6px; display: grid; justify-items: center; gap: 1px; position: relative; }
+.item canvas { width: 60px; height: 50px; }
+.item .nm { font-size: 11px; font-weight: 600; line-height: 1.15; text-align: center; min-height: 2.3em; display: grid; place-items: center; }
+.item .pr { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.item[aria-pressed="true"] { border-color: var(--sky); background: var(--panel-2); }
+.item.locked { opacity: .5; }
+.item.locked .pr { color: var(--warn); }
+
+/* Overlays */
+.overlay { position: fixed; inset: 0; z-index: 20; background: rgba(8, 13, 16, .72); display: grid; place-items: center; padding: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-top: max(16px, env(safe-area-inset-top, 0px)); padding-bottom: max(16px, env(safe-area-inset-bottom, 0px)); }
+.card { width: 100%; max-width: 440px; max-height: 100%; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; box-shadow: 0 20px 60px rgba(0,0,0,.5); animation: cin .25s ease-out; }
+@keyframes cin { from { opacity: 0; transform: translateY(12px) scale(.98); } }
+.tag { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--sky); }
+.tag.chs, .tag.law { color: var(--bad); }
+.tag.people { color: var(--sun); }
+.tag.biz { color: var(--good); }
+.card h2 { font: 700 20px/1.2 var(--font-display); margin: 6px 0 10px; text-wrap: balance; }
+.card p { margin: 0 0 12px; color: #cfd9d6; line-height: 1.5; }
+.from { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+.opts { display: grid; gap: 8px; }
+.opt { text-align: left; background: var(--panel-2); border: 1px solid var(--line); border-radius: 11px; padding: 11px 13px; display: flex; justify-content: space-between; align-items: center; gap: 10px; font-weight: 500; line-height: 1.3; }
+.opt:hover { border-color: var(--sky); }
+.opt .cost { flex: none; font-size: 12px; color: var(--warn); font-variant-numeric: tabular-nums; }
+.fx { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; }
+.fx span { font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 99px; background: var(--panel-2); font-variant-numeric: tabular-nums; }
+.fx .up { color: var(--good); }
+.fx .down { color: var(--bad); }
+.primary { width: 100%; background: var(--sky); color: #08242c; font-weight: 700; border-radius: 11px; padding: 12px; font-size: 15px; }
+.primary:hover { filter: brightness(1.08); }
+.ghost { width: 100%; border: 1px solid var(--line); border-radius: 11px; padding: 11px; font-weight: 600; color: var(--text); }
+.goal { display: flex; gap: 10px; align-items: baseline; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.goal:first-child { border-top: 0; }
+.goal .mk { flex: none; width: 18px; font-weight: 700; text-align: center; }
+.goal .mk.ok { color: var(--good); }
+.goal .mk.no { color: var(--bad); }
+.goal .mk.wait { color: var(--muted); }
+.goal .cur { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Start screen */
+.start { background: radial-gradient(120% 70% at 50% 0%, #1d3440 0%, var(--bg) 60%); }
+.start .card { background: transparent; border: 0; box-shadow: none; padding: 8px 0; }
+.start h1 { font: 700 clamp(30px, 9vw, 40px)/1.05 var(--font-display); margin: 6px 0 12px; text-wrap: balance; }
+.start h1 em { font-style: normal; color: var(--sun); }
+.lead { color: #c4d0cd; margin: 0 0 20px; }
+.field { display: grid; gap: 6px; margin-bottom: 12px; }
+.field label { font-size: 12px; color: var(--muted); }
+.field .row { display: flex; gap: 6px; }
+.field input { flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 11px; padding: 12px 14px; color: var(--text); font: 500 15px var(--font-body); user-select: text; -webkit-user-select: text; }
+.field input:focus { border-color: var(--sky); outline: none; }
+.field .row button { flex: none; padding: 0 12px; border-radius: 11px; border: 1px solid var(--line); font-size: 12px; font-weight: 600; color: var(--muted); }
+.rules { margin: 18px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 12px; color: var(--muted); }
+.rules li { padding-left: 14px; position: relative; }
+.rules li::before { content: ""; position: absolute; left: 0; top: .55em; width: 6px; height: 6px; border-radius: 50%; background: var(--line); }
+.best { margin-top: 14px; font-size: 12px; color: var(--sun); }
+.stack { display: grid; gap: 8px; margin-top: 8px; }
+
+/* Summary sheet & tile info */
+.sheet { align-items: end; }
+.sheet .card { max-height: 86%; border-radius: 16px; }
+.sec { margin-top: 16px; }
+.sec h3 { font: 600 12px var(--font-body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+.kv { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; font-size: 13px; border-bottom: 1px dashed rgba(45, 68, 80, .7); }
+.kv:last-child { border-bottom: 0; }
+.kv b { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kv.total b { font-size: 15px; }
+.pos { color: var(--good); } .neg { color: var(--bad); } .mid { color: var(--warn); }
+.seg { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.seg button { padding: 8px 0; border-radius: 8px; background: var(--panel-2); font-size: 12px; font-weight: 600; color: var(--muted); }
+.seg button[aria-pressed="true"] { color: #08242c; background: var(--sky); }
+.hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.log { display: grid; gap: 4px; font-size: 12px; color: #c4d0cd; }
+.log div span { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 6px; }
+.closeX { float: right; width: 32px; height: 32px; margin: -6px -6px 0 0; border-radius: 8px; font-size: 20px; line-height: 1; color: var(--muted); }
+#info { position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; display: flex; justify-content: center; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-bottom: max(10px, env(safe-area-inset-bottom, 0px)); pointer-events: none; }
+#info .card { max-width: 528px; padding: 16px; pointer-events: auto; }
+#info h2 { font-size: 17px; margin: 0 0 6px; }
+#info .btns { display: flex; gap: 8px; margin-top: 12px; }
+#info .btns button { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--line); font-weight: 600; }
+#info .btns .danger { border-color: rgba(226, 90, 79, .6); color: var(--bad); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="hud">
+    <div class="hud-top">
+      <div class="who">
+        <div class="city" id="cityLbl">Город</div>
+        <div class="sub" id="popLbl">—</div>
+      </div>
+      <div class="time">
+        <div id="dateLbl">—</div>
+        <div class="speeds" role="group" aria-label="Скорость времени">
+          <button data-speed="0" aria-label="Пауза"><svg viewBox="0 0 12 12"><rect x="2" y="1.5" width="3" height="9" rx=".6"/><rect x="7" y="1.5" width="3" height="9" rx=".6"/></svg></button>
+          <button data-speed="1" aria-label="Обычная скорость"><svg viewBox="0 0 12 12"><path d="M3 1.5v9l7-4.5z"/></svg></button>
+          <button data-speed="2" aria-label="Скорость ×2">×2</button>
+          <button data-speed="4" aria-label="Скорость ×4">×4</button>
+        </div>
+      </div>
+    </div>
+    <div class="chips" id="chips">
+      <button class="chip" data-open="sum" id="cBudget"><span class="k">Бюджет</span><span class="v">—</span><span class="bar"><i></i></span></button>
+      <button class="chip" data-open="sum" id="cAppr"><span class="k">Доверие</span><span class="v">—</span><span class="bar"><i></i></span></button>
+      <button class="chip" data-open="sum" id="cRate"><span class="k">Область</span><span class="v">—</span><span class="bar"><i></i></span></button>
+      <button class="chip" data-open="sum" id="cEco"><span class="k">Экология</span><span class="v">—</span><span class="bar"><i></i></span></button>
+    </div>
+    <div id="riskPill" hidden>Интерес прокуратуры: 0%</div>
+  </header>
+  <main id="mapWrap">
+    <canvas id="map" aria-label="Карта города"></canvas>
+    <div id="toasts" aria-live="polite"></div>
+  </main>
+  <footer id="dock">
+    <div id="toolHint" hidden><span id="toolHintText"></span><button id="toolCancel">Отмена</button></div>
+    <div class="tabs" role="tablist" id="tabs"></div>
+    <div class="items" id="items"></div>
+  </footer>
+</div>
+
+<div id="info" hidden><div class="card" id="infoCard"></div></div>
+<div id="sheet" class="overlay sheet" hidden><div class="card" id="sheetCard"></div></div>
+<div id="modal" class="overlay" hidden><div class="card" id="modalCard"></div></div>
+
+<div id="start" class="overlay start">
+  <div class="card">
+    <div class="tag">Назначение на должность</div>
+    <h1>Симулятор <em>акима</em></h1>
+    <p class="lead">Вам доверили небольшой город у реки. Стройте, распределяйте бюджет и принимайте решения. Задача одна: удержаться в должности как можно дольше.</p>
+    <div class="field">
+      <label for="akimName">Имя акима</label>
+      <div class="row"><input id="akimName" maxlength="28" placeholder="Ваше имя" autocomplete="off"></div>
+    </div>
+    <div class="field">
+      <label for="cityName">Название города</label>
+      <div class="row"><input id="cityName" maxlength="22" placeholder="Придумайте название" autocomplete="off"><button id="rndCity" type="button">Случайно</button></div>
+    </div>
+    <div class="stack">
+      <button class="primary" id="btnNew">Вступить в должность</button>
+      <button class="ghost" id="btnCont" hidden>Продолжить</button>
+    </div>
+    <div class="best" id="bestLbl" hidden></div>
+    <ul class="rules">
+      <li>Время идёт само. Ставьте паузу, когда нужно подумать.</li>
+      <li>Здания работают, только если рядом проходит дорога.</li>
+      <li>Вас снимут, если доверие жителей или рейтинг у области упадут до 10%.</li>
+      <li>Три месяца подряд с долгом больше 50 млн ₸ означают финансовый крах.</li>
+      <li>Сомнительные решения привлекают прокуратуру. На 100% возбуждают дело.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ---------- Константы ---------- */
+const COLS = 10, ROWS = 14, N = COLS * ROWS;
+const DAY_MS = 650;
+const START_YEAR = 2027;
+const SAVE_KEY = 'akim-sim-save-v1', BEST_KEY = 'akim-sim-best-v1';
+const MON_GEN = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+const MON_NOM = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+const TAX_MULT = [0.6, 0.8, 1, 1.2, 1.4];
+const TAX_MOOD = [7, 3.5, 0, -5, -11];
+const TAX_NAME = ['Минимальная', 'Пониженная', 'Обычная', 'Повышенная', 'Высокая'];
+
+const B = {
+  road:   { name: 'Дорога', cat: 'home', cost: 2, upkeep: 0.05, desc: 'Связывает участки. Через реку строится мост за 12 млн ₸.' },
+  house:  { name: 'Частный дом', cat: 'home', cost: 6, cap: 40, power: 1, water: 1, desc: 'Жильё на 40 человек.' },
+  apt:    { name: 'Многоэтажка', cat: 'home', cost: 28, upkeep: 0.4, cap: 320, power: 5, water: 5, eco: -0.6, unlock: 800, desc: 'Жилой дом на 320 человек.' },
+  school: { name: 'Школа', cat: 'social', cost: 32, upkeep: 2.2, jobs: 40, power: 2, water: 1, radius: 4, service: 'edu', desc: 'Обслуживает дома в радиусе 4 участков.' },
+  clinic: { name: 'Поликлиника', cat: 'social', cost: 38, upkeep: 2.6, jobs: 50, power: 2, water: 2, radius: 4, service: 'health', desc: 'Обслуживает дома в радиусе 4 участков.' },
+  park:   { name: 'Парк', cat: 'social', cost: 7, upkeep: 0.3, eco: 2.5, noRoad: true, desc: 'Улучшает экологию и настроение. Дорога не нужна.' },
+  market: { name: 'Рынок', cat: 'eco', cost: 16, upkeep: 0.3, jobs: 70, income: 2.5, power: 1, water: 1, desc: 'Рабочие места и сборы с торговли.' },
+  factory:{ name: 'Завод', cat: 'eco', cost: 65, upkeep: 0.8, jobs: 260, income: 6.5, power: 8, water: 4, eco: -7, desc: 'Много рабочих мест и налогов, но портит экологию.' },
+  office: { name: 'Бизнес-центр', cat: 'eco', cost: 48, upkeep: 0.8, jobs: 180, income: 4.5, power: 4, water: 2, eco: -0.5, unlock: 2500, desc: 'Офисные рабочие места почти без вреда для экологии.' },
+  tec:    { name: 'ТЭЦ', cat: 'infra', cost: 85, upkeep: 3, jobs: 90, pOut: 70, water: 3, eco: -8, desc: 'Даёт 70 единиц электричества и тепла. Зимой без неё никак.' },
+  vodo:   { name: 'Водоканал', cat: 'infra', cost: 42, upkeep: 1.6, jobs: 35, wOut: 70, power: 3, desc: 'Даёт 70 единиц воды.' },
+  police: { name: 'Полиция', cat: 'infra', cost: 26, upkeep: 2, jobs: 35, power: 1, water: 1, radius: 5, service: 'safety', desc: 'Обслуживает дома в радиусе 5 участков.' },
+  fire:   { name: 'Пожарная часть', cat: 'infra', cost: 24, upkeep: 1.6, jobs: 30, power: 1, water: 2, radius: 5, service: 'fire', desc: 'Защищает здания в радиусе 5 участков.' },
+  akimat: { name: 'Акимат', cat: null, cost: 0, upkeep: 1.5, jobs: 60, power: 2, water: 1, desc: 'Ваш рабочий кабинет. Снести нельзя.' }
+};
+const CATS = [['home', 'Жильё'], ['social', 'Социальное'], ['eco', 'Экономика'], ['infra', 'Инфраструктура'], ['demolish', 'Снос']];
+const SERVICE_NAME = { edu: 'школами', health: 'поликлиниками', safety: 'полицией', fire: 'пожарными' };
+
+/* ---------- Утилиты ---------- */
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const rnd = (a, b) => a + Math.random() * (b - a);
+const ri = (a, b) => Math.floor(rnd(a, b + 1));
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const fmtInt = n => Math.round(n).toLocaleString('ru-RU');
+const money = v => {
+  const a = Math.abs(v), sign = v < 0 ? '−' : '';
+  if (a >= 1000) return sign + (a / 1000).toFixed(2).replace('.', ',') + ' млрд ₸';
+  return sign + Math.round(a) + ' млн ₸';
+};
+const signed = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(Math.round(v));
+function plural(n, f) { n = Math.abs(n) % 100; const n1 = n % 10; if (n > 10 && n < 20) return f[2]; if (n1 > 1 && n1 < 5) return f[1]; if (n1 === 1) return f[0]; return f[2]; }
+function termText(days) {
+  const y = Math.floor(days / 360), m = Math.floor((days % 360) / 30);
+  const parts = [];
+  if (y) parts.push(y + ' ' + plural(y, ['год', 'года', 'лет']));
+  if (m || !y) parts.push(m + ' ' + plural(m, ['месяц', 'месяца', 'месяцев']));
+  return parts.join(' ');
+}
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+  del(k) { try { localStorage.removeItem(k); } catch (e) {} }
+};
+
+/* ---------- Состояние ---------- */
+let s = null;           // сохраняемое состояние
+let speed = 1, savedSpeed = 1;
+let modalOpen = false;
+let tool = null, cat = 'home';
+let selTile = -1;
+let acc = 0, lastT = 0;
+let D = null;           // производные показатели
+const fxAnims = [];
+
+const month = () => Math.floor(s.day / 30) % 12;
+const year = () => START_YEAR + Math.floor(s.day / 360);
+const winter = () => [10, 11, 0, 1, 2].includes(month());
+const xy = i => [i % COLS, Math.floor(i / COLS)];
+const idx = (x, y) => y * COLS + x;
+function nbrs(i) {
+  const [x, y] = xy(i), r = [];
+  if (x > 0) r.push(i - 1); if (x < COLS - 1) r.push(i + 1);
+  if (y > 0) r.push(i - COLS); if (y < ROWS - 1) r.push(i + COLS);
+  return r;
+}
+const hasRoad = i => nbrs(i).some(j => s.grid[j].b === 'road');
+const count = t => s.grid.reduce((a, c) => a + (c.b === t ? 1 : 0), 0);
+const has = t => s.grid.some(c => c.b === t);
+const isRes = b => b === 'house' || b === 'apt';
+const riverside = () => s.grid.map((c, i) => i).filter(i => isRes(s.grid[i].b) && nbrs(i).some(j => s.grid[j].t === 'w'));
+
+function log(text) { s.log.unshift({ d: s.day, text }); if (s.log.length > 40) s.log.length = 40; }
+function dateText(day = s.day) {
+  const m = Math.floor(day / 30) % 12, y = START_YEAR + Math.floor(day / 360);
+  return (day % 30 + 1) + ' ' + MON_GEN[m] + ' ' + y;
+}
+
+/* ---------- Новая игра ---------- */
+function newGame(akim, city) {
+  const grid = [];
+  for (let i = 0; i < N; i++) grid.push({ t: 'g', b: null, n: Math.random() });
+  // река
+  let rx = Math.random() < 0.5 ? 7 : 8;
+  for (let y = 0; y < ROWS; y++) {
+    grid[idx(rx, y)].t = 'w';
+    if (y < ROWS - 1 && Math.random() < 0.35) {
+      const nx = clamp(rx + (Math.random() < 0.5 ? -1 : 1), 7, 8);
+      if (nx !== rx) { grid[idx(nx, y)].t = 'w'; rx = nx; }
+    }
+  }
+  const put = (x, y, b) => { grid[idx(x, y)].b = b; grid[idx(x, y)].t = 'g'; };
+  for (let x = 0; x <= 5; x++) put(x, 7, 'road');
+  for (let y = 2; y <= 12; y++) put(3, y, 'road');
+  put(2, 6, 'akimat');
+  [[4, 6], [4, 5], [4, 8], [4, 9], [2, 8], [2, 9], [2, 4], [4, 4]].forEach(([x, y]) => put(x, y, 'house'));
+  put(5, 8, 'school'); put(1, 6, 'market'); put(2, 11, 'tec'); put(4, 11, 'vodo');
+  // лес
+  let f = 0, guard = 0;
+  while (f < 13 && guard++ < 500) {
+    const i = ri(0, N - 1), c = grid[i];
+    const [x, y] = xy(i);
+    if (c.t !== 'g' || c.b) continue;
+    if (x >= 1 && x <= 5 && y >= 3 && y <= 10 && Math.random() < 0.8) continue;
+    c.t = 'f'; f++;
+  }
+  s = {
+    v: 1, akim, city, day: 0, budget: 120, pop: 300, approval: 55, rating: 55, risk: 0,
+    mood: 0, rmood: 0, ecoMod: 0, tax: 2, grid, seen: {}, queue: [], goals: [], log: [],
+    debtMonths: 0, nextEventDay: ri(14, 24), pending: null, over: false
+  };
+  log('Вы вступили в должность акима города ' + city + '.');
+  D = calc();
+  s.goals = makeGoals();
+}
+
+/* ---------- Экономика и показатели ---------- */
+function calc() {
+  const d = { cap: 0, jobs: 0, pOut: 0, pDem: 0, wOut: 0, wDem: 0, upkeep: 0, biz: 0, ecoB: 0, parks: 0, noRoad: 0,
+    cov: { edu: 0, health: 0, safety: 0, fire: 0 }, ok: new Array(N).fill(false) };
+  const res = [], svc = { edu: [], health: [], safety: [], fire: [] };
+  for (let i = 0; i < N; i++) {
+    const c = s.grid[i];
+    if (!c.b) { if (c.t === 'f') d.ecoB += 0.35; continue; }
+    const T = B[c.b];
+    d.upkeep += T.upkeep || 0;
+    if (c.b === 'road') { d.ok[i] = true; continue; }
+    const ok = T.noRoad || hasRoad(i);
+    d.ok[i] = ok;
+    if (!ok) { d.noRoad++; continue; }
+    d.pDem += T.power || 0; d.wDem += T.water || 0; d.pOut += T.pOut || 0; d.wOut += T.wOut || 0;
+    d.jobs += T.jobs || 0; d.biz += T.income || 0; d.ecoB += T.eco || 0;
+    if (c.b === 'park') d.parks++;
+    if (T.cap) { d.cap += T.cap; res.push([i, T.cap]); }
+    if (T.service) svc[T.service].push([i, T.radius]);
+  }
+  let capTot = 0;
+  const covC = { edu: 0, health: 0, safety: 0, fire: 0 };
+  d.covered = {};
+  for (const [i, cap] of res) {
+    capTot += cap;
+    const [x, y] = xy(i);
+    for (const k in svc) {
+      const hit = svc[k].some(([j, r]) => { const [a, b] = xy(j); return Math.abs(a - x) + Math.abs(b - y) <= r; });
+      if (hit) { covC[k] += cap; (d.covered[k] = d.covered[k] || new Set()).add(i); }
+    }
+  }
+  for (const k in covC) d.cov[k] = capTot ? covC[k] / capTot : 0;
+  d.pRatio = d.pDem ? Math.min(1, d.pOut / d.pDem) : 1;
+  d.wRatio = d.wDem ? Math.min(1, d.wOut / d.wDem) : 1;
+  d.workforce = s.pop * 0.55;
+  d.unemp = d.workforce > 0 ? Math.max(0, (d.workforce - d.jobs) / d.workforce) : 0;
+  d.eco = clamp(66 + d.ecoB + s.ecoMod - s.pop / 2500, 0, 100);
+
+  // финансы за месяц
+  d.taxInc = s.pop * 0.022 * TAX_MULT[s.tax] * (1 - d.unemp * 0.6);
+  d.bizInc = d.biz * (d.pRatio < 1 ? 0.8 : 1);
+  d.transfer = 9 + s.rating * 0.08;
+  d.interest = s.budget < 0 ? -s.budget * 0.02 : 0;
+  d.income = d.taxInc + d.bizInc + d.transfer;
+  d.expense = d.upkeep + d.interest;
+  d.net = d.income - d.expense;
+
+  // настроение жителей
+  const parts = [];
+  const add = (label, v) => { parts.push([label, v]); return v; };
+  let t = 58;
+  if (s.pop > 150) {
+    t += add('Школы', (d.cov.edu - 0.6) * 22);
+    t += add('Поликлиники', (d.cov.health - 0.6) * 22);
+    t += add('Безопасность', (d.cov.safety - 0.5) * 14);
+    t += add('Пожарная защита', (d.cov.fire - 0.5) * 8);
+  }
+  t += add('Безработица', -d.unemp * 45);
+  t += add(winter() ? 'Электричество и тепло (зима)' : 'Электричество', -(1 - d.pRatio) * (winter() ? 55 : 30));
+  t += add('Водоснабжение', -(1 - d.wRatio) * 40);
+  t += add('Экология', (d.eco - 55) * 0.35);
+  const parksPerK = d.parks / Math.max(0.3, s.pop / 1000);
+  t += add('Парки', Math.min(6, parksPerK * 3) - 2);
+  t += add('Местные сборы', TAX_MOOD[s.tax]);
+  t += add('Недавние решения', s.mood);
+  d.target = t; d.parts = parts;
+
+  const budgetTerm = s.budget < 0 ? Math.max(-20, s.budget / 5) : Math.min(8, s.budget / 30);
+  d.rtarget = 50 + budgetTerm + (s.approval - 50) * 0.25 + Math.min(8, s.pop / 2000) + s.rmood;
+  return d;
+}
+
+/* ---------- Задачи области ---------- */
+const GOALS = {
+  pop:     { make: () => Math.max(Math.round(s.pop * 1.3 / 50) * 50, Math.round(s.pop / 50) * 50 + 200), label: t => 'Население не менее ' + fmtInt(t) + ' чел.', ok: (d, t) => s.pop >= t, cur: () => fmtInt(s.pop) },
+  edu:     { make: () => 80, label: t => 'Охват школами не менее ' + t + '%', ok: (d, t) => d.cov.edu * 100 >= t, cur: d => Math.round(d.cov.edu * 100) + '%' },
+  health:  { make: () => 80, label: t => 'Охват поликлиниками не менее ' + t + '%', ok: (d, t) => d.cov.health * 100 >= t, cur: d => Math.round(d.cov.health * 100) + '%' },
+  safety:  { make: () => 70, label: t => 'Охват полицией не менее ' + t + '%', ok: (d, t) => d.cov.safety * 100 >= t, cur: d => Math.round(d.cov.safety * 100) + '%' },
+  unemp:   { make: () => 8, label: t => 'Безработица не выше ' + t + '%', ok: (d, t) => d.unemp * 100 <= t, cur: d => Math.round(d.unemp * 100) + '%' },
+  budget:  { make: () => 0, label: () => 'Бюджет без долга на 31 декабря', ok: () => s.budget >= 0, cur: () => money(s.budget) },
+  eco:     { make: () => 55, label: t => 'Экология не ниже ' + t, ok: (d, t) => d.eco >= t, cur: d => Math.round(d.eco) },
+  appr:    { make: () => 55, label: t => 'Доверие жителей не ниже ' + t + '%', ok: (d, t) => s.approval >= t, cur: () => Math.round(s.approval) + '%' },
+  jobs:    { make: () => Math.round((D.jobs + 150) / 10) * 10, label: t => 'Не менее ' + fmtInt(t) + ' рабочих мест', ok: (d, t) => d.jobs >= t, cur: d => fmtInt(d.jobs) }
+};
+function makeGoals() {
+  const ids = Object.keys(GOALS);
+  const unmet = ids.filter(id => !GOALS[id].ok(D, GOALS[id].make()));
+  const pool = unmet.sort(() => Math.random() - 0.5).concat(ids.filter(id => !unmet.includes(id)).sort(() => Math.random() - 0.5));
+  const chosen = ['pop'].concat(pool.filter(id => id !== 'pop')).slice(0, 3);
+  return chosen.map(id => ({ id, target: GOALS[id].make() }));
+}
+
+/* ---------- События ---------- */
+const kindTag = { chs: 'ЧС', oblast: 'Область', people: 'Обращение жителей', biz: 'Бизнес', law: 'Прокуратура', city: 'Городское хозяйство' };
+const EVENTS = [
+  { id: 'flood', kind: 'chs', from: 'Департамент по чрезвычайным ситуациям', title: 'Весенний паводок', w: 8,
+    cond: () => month() === 3 && riverside().length > 0,
+    text: 'Уровень воды в реке за сутки поднялся на 40 см. Пик ожидается через 5–7 дней. Под угрозой дома у берега.',
+    opts: [
+      { label: 'Укрепить дамбу и выставить мешки с песком', fx: { budget: -30, approval: 3 }, result: 'Дамбу укрепили, вода прошла без подтоплений.' },
+      { label: 'Подготовить эвакуацию, дамбу не трогать', cost: -8, run: () => Math.random() < 0.5
+        ? { fx: { budget: -8, flood: 1, approval: -4 }, text: 'Вода подтопила прибрежную улицу. Людей вывезли вовремя, но один дом восстановлению не подлежит.' }
+        : { fx: { budget: -8, approval: 1 }, text: 'Пик оказался ниже прогноза. Эвакуация не понадобилась.' } },
+      { label: 'Положиться на прогноз', run: () => Math.random() < 0.65
+        ? { fx: { flood: 3, approval: -12, rating: -8 }, text: 'Река вышла из берегов. Несколько домов разрушены, область требует объяснений.' }
+        : { fx: {}, text: 'Повезло: река осталась в берегах.' } }
+    ] },
+  { id: 'snow', kind: 'city', from: 'Отдел ЖКХ', title: 'Снегопад парализовал город', w: 4,
+    cond: () => [11, 0, 1].includes(month()),
+    text: 'За ночь выпало 35 см снега. Автобусы стоят, к частному сектору не может проехать скорая.',
+    opts: [
+      { label: 'Нанять технику подрядчиков', fx: { budget: -14, approval: 3 }, result: 'К утру основные улицы расчищены.' },
+      { label: 'Справляться своими силами', fx: { budget: -3, approval: -7 }, result: 'Город расчищали четыре дня. Жители недовольны.' }
+    ] },
+  { id: 'heating', kind: 'chs', from: 'Городские тепловые сети', title: 'Авария на теплотрассе', w: 5,
+    cond: () => [11, 0, 1].includes(month()) && has('tec'),
+    text: 'Прорыв магистральной трубы. При −28 °C без отопления остались около 40 домов.',
+    opts: [
+      { label: 'Аварийный ремонт круглосуточно', fx: { budget: -24, approval: 2 }, result: 'Тепло вернули через 18 часов.' },
+      { label: 'Раздать обогреватели, ремонт в плановом порядке', fx: { budget: -6, approval: -10, rating: -5 }, result: 'Жители три дня сидели в холодных квартирах. Видео разошлось по соцсетям.' }
+    ] },
+  { id: 'gas', kind: 'people', from: 'Жители частного сектора', title: 'Газификация частного сектора', w: 2, once: true,
+    cond: () => count('house') >= 6,
+    text: 'Жители собрали 1 200 подписей: зимой они топят углём, и дышать нечем. Просят провести газ.',
+    opts: [
+      { label: 'Профинансировать из местного бюджета', fx: { budget: -60, approval: 9, eco: 3 }, result: 'Проект запущен. К следующей зиме газ придёт в дома.' },
+      { label: 'Подать заявку в республиканскую программу', fx: { rating: 1, later: { days: 150, p: 0.5, title: 'Газификация', text: 'Заявку одобрили: газ проведут за счёт республики.', fx: { approval: 8, eco: 3 }, failText: 'Заявку на газификацию отклонили. Жители разочарованы.', failFx: { approval: -5 } } }, result: 'Документы ушли в министерство. Ответ будет через несколько месяцев.' },
+      { label: 'Отказать: денег нет', fx: { approval: -6 }, result: 'Жители обещают дойти до акима области.' }
+    ] },
+  { id: 'developer', kind: 'biz', from: 'Строительная компания', title: 'Застройщик хочет парк', w: 3,
+    cond: () => has('park') && s.pop >= 500,
+    text: 'Застройщик готов бесплатно построить многоэтажку на месте городского парка. Город получит квартиры и налоги.',
+    opts: [
+      { label: 'Согласиться', fx: { replacePark: 1, approval: -6, risk: 10 }, result: 'Парк вырубили, начали стройку. Активисты вышли с плакатами.' },
+      { label: 'Отказать и предложить другой участок', fx: { approval: 2 }, result: 'Застройщик обещал подумать. Парк остался.' }
+    ] },
+  { id: 'kickback', kind: 'law', from: 'Подрядчик по ремонту дорог', title: 'Неформальное предложение', w: 3,
+    cond: () => s.day > 60,
+    text: 'Подрядчик предлагает «договориться»: смета на ремонт дорог будет завышена, разница — «на развитие». Работу он гарантирует быстрее всех.',
+    opts: [
+      { label: 'Согласиться на завышенную смету', fx: { budget: -10, risk: 35, rating: 2 }, result: 'Дороги отремонтировали быстро. Но в бухгалтерии остались вопросы.' },
+      { label: 'Провести открытый тендер', fx: { budget: -4, approval: 2 }, result: 'Тендер выиграла другая компания. Дороги отремонтируют в срок.' },
+      { label: 'Сообщить в антикоррупционную службу', fx: { rating: 4, risk: -10 }, result: 'Подрядчик задержан. Область отметила вашу позицию.' }
+    ] },
+  { id: 'inspection', kind: 'oblast', from: 'Аппарат акима области', title: 'Проверка исполнения бюджета', w: 3,
+    cond: () => s.day > 90,
+    text: () => 'Через неделю в город приезжает комиссия. Сейчас в бюджете ' + money(s.budget) + '.',
+    opts: [
+      { label: 'Предоставить отчёты как есть', run: () => s.budget >= 0
+        ? { fx: { rating: 5 }, text: 'Комиссия замечаний не нашла.' }
+        : { fx: { rating: -9 }, text: 'Комиссия зафиксировала дефицит и вынесла предупреждение.' } },
+      { label: 'Нанять аудиторов и привести документы в порядок', fx: { budget: -6, rating: 2, risk: -12 }, result: 'Документы приведены в порядок. Вопросов к вам меньше.' }
+    ] },
+  { id: 'teachers', kind: 'people', from: 'Профсоюз учителей', title: 'Учителя просят доплату', w: 3,
+    cond: () => has('school'),
+    text: 'Учителя просят доплату за классное руководство. Иначе несколько молодых педагогов уедут в областной центр.',
+    opts: [
+      { label: 'Доплатить из местного бюджета', fx: { budget: -16, approval: 5 }, result: 'Учителя остаются. Родители довольны.' },
+      { label: 'Отказать', fx: { approval: -5 }, result: 'Трое учителей написали заявления.' }
+    ] },
+  { id: 'investor', kind: 'biz', from: 'Иностранный инвестор', title: 'Завод на 250 рабочих мест', w: 3,
+    cond: () => s.pop >= 600 && count('factory') < 3,
+    text: 'Инвестор готов за свой счёт построить перерабатывающий завод. Нужен только участок.',
+    opts: [
+      { label: 'Выделить землю', fx: { place: 'factory', rating: 6 }, result: 'Завод построен. Экологи недовольны, но рабочие места появились.' },
+      { label: 'Отказать: экология важнее', fx: { rating: -4, approval: 2 }, result: 'Инвестор ушёл в соседний район.' }
+    ] },
+  { id: 'trees', kind: 'people', from: 'Экоактивисты', title: 'Протест против вырубки', w: 2,
+    cond: () => s.day > 40,
+    text: 'Под расширение улицы нужно спилить аллею тополей. Активисты собрались у акимата.',
+    opts: [
+      { label: 'Изменить проект и сохранить аллею', fx: { budget: -10, approval: 4, eco: 1 }, result: 'Проект переделали, деревья сохранили.' },
+      { label: 'Продолжить по плану', fx: { approval: -5, rating: 1, eco: -1 }, result: 'Аллею спилили. Активисты обещают не забыть.' }
+    ] },
+  { id: 'potholes', kind: 'people', from: 'Городской блогер', title: 'Видео о ямах на дорогах', w: 3,
+    cond: () => s.day > 30 && month() >= 3 && month() <= 9,
+    text: 'Ролик о разбитых дорогах набрал 300 тысяч просмотров. Его прислали в аппарат акима области.',
+    opts: [
+      { label: 'Срочный ямочный ремонт', fx: { budget: -12, approval: 4, rating: 2 }, result: 'Ямы заделали за неделю. Блогер снял продолжение «до и после».' },
+      { label: 'Записать ответное видео с планом ремонта', fx: { approval: -1, rating: -1 }, result: 'Комментарии под видео в основном скептические.' },
+      { label: 'Не реагировать', fx: { approval: -7, rating: -4 }, result: 'Тема дошла до республиканских СМИ.' }
+    ] },
+  { id: 'visit', kind: 'oblast', from: 'Аппарат акима области', title: 'Визит акима области', w: 3,
+    cond: () => s.day > 60,
+    text: 'Аким области приедет через три дня. Маршрут: центральная улица, школа, рынок.',
+    opts: [
+      { label: 'Покрасить фасады по маршруту визита', fx: { budget: -10, rating: 5, approval: -3 }, result: 'Визит прошёл гладко. Жители смеются над «потёмкинской улицей».' },
+      { label: 'Показать город как есть', run: () => { const v = Math.round((s.approval - 50) / 3); return { fx: { rating: v }, text: v >= 0 ? 'Аким области отметил порядок в городе.' : 'Аким области увидел проблемы и поручил их исправить.' }; } }
+    ] },
+  { id: 'grantSchool', kind: 'oblast', from: 'Управление образования области', title: 'Новая школа по программе', w: 3,
+    cond: () => s.pop >= 500 && D.cov.edu < 0.9,
+    text: 'Республиканская программа построит школу. Городу нужно софинансирование 20%.',
+    opts: [
+      { label: 'Участвовать в программе', fx: { budget: -8, place: 'school', rating: 3 }, result: 'Школа построена.' },
+      { label: 'Отказаться', fx: { rating: -2 }, result: 'Квоту отдали другому району.' }
+    ] },
+  { id: 'flu', kind: 'chs', from: 'Городская поликлиника', title: 'Эпидемия гриппа', w: 4,
+    cond: () => [9, 10, 11, 0, 1].includes(month()),
+    text: () => 'Поликлиники переполнены, очереди с утра. Охват поликлиниками сейчас ' + Math.round(D.cov.health * 100) + '%.',
+    opts: [
+      { label: 'Закупить вакцины и открыть дополнительные приёмные', fx: { budget: -12, approval: 3 }, result: 'Через три недели заболеваемость пошла на спад.' },
+      { label: 'Ограничиться рекомендациями', run: () => ({ fx: { approval: -Math.round(2 + 10 * (1 - D.cov.health)) }, text: D.cov.health > 0.8 ? 'Поликлиники справились, но с трудом.' : 'Не хватает врачей. Жители возмущены.' }) }
+    ] },
+  { id: 'marketFire', kind: 'chs', from: 'Пожарная служба', title: 'Пожар на рынке', w: 3,
+    cond: () => has('market'),
+    text: () => fireCovered('market') ? 'На рынке загорелись павильоны. Пожарные приехали через 7 минут и не дали огню распространиться.' : 'На рынке загорелись павильоны. Пожарной части рядом нет: машины ехали 40 минут, рынок сгорел.',
+    pre: () => { if (!fireCovered('market')) applyFx({ destroy: 'market' }); },
+    opts: [
+      { label: 'Выплатить компенсации торговцам', fx: { budget: -15, approval: 4 }, result: 'Торговцы получили компенсации.' },
+      { label: 'Обойтись без компенсаций', fx: { approval: -6 }, result: 'Торговцы вышли к акимату.' }
+    ] },
+  { id: 'withdraw', kind: 'oblast', from: 'Управление финансов области', title: 'Изъятие свободных средств', w: 3,
+    cond: () => s.budget > 160,
+    text: () => 'Область считает, что у города слишком много свободных денег (' + money(s.budget) + '), и хочет забрать 15%.',
+    opts: [
+      { label: 'Согласиться', fx: { budgetPct: -0.15, rating: 3 }, result: 'Средства перечислены в областной бюджет.' },
+      { label: 'Обосновать потребность в средствах', run: () => Math.random() < 0.5
+        ? { fx: { rating: -2 }, text: 'Обоснование приняли. Деньги остались в городе.' }
+        : { fx: { budgetPct: -0.15, rating: -5 }, text: 'Обоснование не приняли. Деньги изъяли, а к вам появились вопросы.' } }
+    ] },
+  { id: 'tariff', kind: 'city', from: 'Поставщик тепла', title: 'Повышение тарифа на тепло', w: 3,
+    cond: () => has('tec') && s.day > 60,
+    text: 'Поставщик просит поднять тариф на 18%: без этого он не сможет менять изношенные трубы.',
+    opts: [
+      { label: 'Согласовать повышение', fx: { approval: -6, rating: 1 }, result: 'Новые тарифы вступят в силу с первого числа.' },
+      { label: 'Компенсировать разницу из бюджета', fx: { budget: -20 }, result: 'Тариф для жителей не изменился.' },
+      { label: 'Отказать', fx: { approval: 2, later: { days: 70, p: 1, title: 'Износ теплосетей', text: 'Поставщик тепла сократил ремонт сетей. Аварий стало больше.', fx: { approval: -6, rating: -2 } } }, result: 'Поставщик предупредил, что урежет ремонтную программу.' }
+    ] },
+  { id: 'dogs', kind: 'people', from: 'Жители микрорайона', title: 'Бездомные собаки', w: 2,
+    cond: () => s.pop >= 400,
+    text: 'Стаи собак собираются у школ. Родители боятся отпускать детей одних.',
+    opts: [
+      { label: 'Программа отлова и стерилизации', fx: { budget: -7, approval: 3 }, result: 'Программа запущена, приют расширен.' },
+      { label: 'Отложить до следующего года', fx: { approval: -4 }, result: 'Жалобы продолжают поступать.' }
+    ] },
+  { id: 'lights', kind: 'city', from: 'Отдел ЖКХ', title: 'Тёмные улицы', w: 2, once: true,
+    cond: () => s.day > 120,
+    text: 'Почти половина улиц не освещается: фонари советские, лампы перегорают.',
+    opts: [
+      { label: 'Установить светодиодные фонари', fx: { budget: -14, approval: 4, eco: 1 }, result: 'Город стал светлее, а счета за электричество меньше.' },
+      { label: 'Заменить только перегоревшие лампы', fx: { budget: -3, approval: -2 }, result: 'Ситуация почти не изменилась.' }
+    ] },
+  { id: 'maslikhat', kind: 'oblast', from: 'Городской маслихат', title: 'Депутаты требуют отчёт', w: 2,
+    cond: () => s.day > 150,
+    text: 'Депутаты маслихата требуют отчитаться о расходах за полгода.',
+    opts: [
+      { label: 'Провести открытый отчёт перед жителями', fx: { approval: 3, risk: -6 }, result: 'Встреча прошла напряжённо, но честно.' },
+      { label: 'Ограничиться письменным отчётом', fx: { approval: -2 }, result: 'Депутаты остались недовольны.' }
+    ] },
+  { id: 'landfill', kind: 'city', from: 'Санитарная служба', title: 'Свалка переполнена', w: 3, once: true,
+    cond: () => s.pop >= 1400,
+    text: 'Городская свалка заполнена. Когда ветер с её стороны, в городе стоит запах.',
+    opts: [
+      { label: 'Построить сортировочный полигон', fx: { budget: -35, eco: 6, approval: 4 }, result: 'Полигон заработает через полгода. Часть отходов пойдёт в переработку.' },
+      { label: 'Расширить старую свалку', fx: { budget: -5, eco: -4, approval: -3 }, result: 'Свалку расширили. Проблема отложена.' }
+    ] },
+  { id: 'newyear', kind: 'city', from: 'Отдел культуры', title: 'Подготовка к Новому году', w: 6,
+    cond: () => month() === 11,
+    text: 'Как оформить главную площадь к празднику?',
+    opts: [
+      { label: 'Ёлка, иллюминация и каток', fx: { budget: -9, approval: 4 }, result: 'На площади многолюдно до ночи.' },
+      { label: 'Только ёлка', fx: { budget: -2 }, result: 'Скромно, но празднично.' }
+    ] },
+  { id: 'cityday', kind: 'city', from: 'Отдел культуры', title: 'День города', w: 6,
+    cond: () => month() === 8,
+    text: () => 'В сентябре ' + s.city + ' отмечает День города.',
+    opts: [
+      { label: 'Концерт, ярмарка и салют', fx: { budget: -12, approval: 5 }, result: 'На праздник пришло полгорода.' },
+      { label: 'Скромные мероприятия', fx: { budget: -3, approval: 1 }, result: 'Прошло тихо, без происшествий.' },
+      { label: 'Отменить, деньги отдать на ремонт школы', fx: { approval: 1, rating: -1 }, result: 'Родители одобрили, молодёжь — не очень.' }
+    ] },
+  { id: 'layoffs', kind: 'biz', from: 'Руководство завода', title: 'Сокращения на заводе', w: 3,
+    cond: () => has('factory'),
+    text: 'Из-за падения заказов завод планирует сократить 120 рабочих.',
+    opts: [
+      { label: 'Субсидировать сохранение рабочих мест', fx: { budget: -20, approval: 2 }, result: 'Сокращения отложены на год.' },
+      { label: 'Открыть курсы переподготовки', fx: { budget: -6, approval: -2 }, result: 'Часть уволенных нашла новую работу.' },
+      { label: 'Не вмешиваться', fx: { approval: -6 }, result: 'Сокращения прошли. Люди уезжают на заработки.' }
+    ] },
+  { id: 'drought', kind: 'chs', from: 'Водоканал', title: 'Дефицит воды', w: 6,
+    cond: () => [5, 6, 7].includes(month()) && D.wRatio < 1,
+    text: 'Жара под сорок. Водоканал не справляется: в верхних районах вода по графику.',
+    opts: [
+      { label: 'Аварийно закупить насосы', fx: { budget: -15, approval: 2 }, result: 'Подачу стабилизировали, но нужен новый водоканал.' },
+      { label: 'Ввести график подачи воды', fx: { approval: -7 }, result: 'Жители набирают воду в вёдра.' }
+    ] },
+  { id: 'journalist', kind: 'law', from: 'Независимое издание', title: 'Запрос о госзакупках', w: 2,
+    cond: () => s.day > 100,
+    text: 'Журналист запросил данные обо всех госзакупках акимата за год.',
+    opts: [
+      { label: 'Опубликовать все данные', fx: { risk: -15, approval: 3, rating: -2 }, result: 'Данные опубликованы. В области этому не рады, но жители оценили.' },
+      { label: 'Отказать под формальным предлогом', fx: { approval: -3, risk: 6 }, result: 'Журналист пишет статью о «закрытом акимате».' }
+    ] },
+  { id: 'buses', kind: 'city', from: 'Городской автопарк', title: 'Изношенные автобусы', w: 3, once: true,
+    cond: () => s.pop >= 1000,
+    text: 'Автобусы ломаются прямо на маршрутах. Половине машин больше 20 лет.',
+    opts: [
+      { label: 'Закупить 20 газовых автобусов', fx: { budget: -40, approval: 6, eco: 2 }, result: 'Новые автобусы вышли на линии.' },
+      { label: 'Капитально отремонтировать старые', fx: { budget: -12, approval: 1 }, result: 'Автобусы пока ездят.' },
+      { label: 'Отложить', fx: { approval: -5 }, result: 'Жалоб на транспорт всё больше.' }
+    ] },
+  { id: 'relative', kind: 'law', from: 'Ваш двоюродный брат', title: 'Семейный тендер', w: 2, once: true,
+    cond: () => s.day > 120,
+    text: 'Двоюродный брат открыл строительную фирму и хочет участвовать в тендере на ремонт поликлиники.',
+    opts: [
+      { label: 'Отказать: конфликт интересов', fx: { rating: 1 }, result: 'Брат обиделся, но вопрос закрыт.' },
+      { label: 'Не препятствовать', fx: { risk: 30, budget: -5 }, result: 'Фирма брата выиграла тендер. Об этом уже судачат.' }
+    ] },
+  { id: 'doctors', kind: 'people', from: 'Главный врач', title: 'Не хватает врачей', w: 3,
+    cond: () => has('clinic'),
+    text: 'В поликлинике 9 вакансий. Молодые врачи не едут: негде жить.',
+    opts: [
+      { label: 'Выделить служебное жильё', fx: { budget: -18, approval: 5 }, result: 'Пять молодых врачей уже приехали.' },
+      { label: 'Обратиться в управление здравоохранения', fx: { rating: -1, later: { days: 90, p: 0.5, title: 'Врачи', text: 'Область направила в город молодых специалистов.', fx: { approval: 4 }, failText: 'Область отказала в направлении врачей.', failFx: { approval: -3 } } }, result: 'Запрос отправлен.' }
+    ] },
+  { id: 'bonus', kind: 'oblast', from: 'Аким области', title: 'Дополнительный транш', w: 4,
+    cond: () => s.rating >= 68,
+    text: 'За хорошие показатели область выделяет городу дополнительное финансирование.',
+    opts: [{ label: 'Принять', fx: { budget: 40 }, result: 'Средства поступили на счёт города.' }] },
+  { id: 'taxProtest', kind: 'biz', from: 'Палата предпринимателей', title: 'Бизнес против сборов', w: 6,
+    cond: () => s.tax >= 3,
+    text: 'Предприниматели жалуются на высокие местные сборы и грозят перенести бизнес в соседний район.',
+    opts: [
+      { label: 'Вернуть обычную ставку', fx: { setTax: 2, approval: 2 }, result: 'Ставка снижена.' },
+      { label: 'Объяснить, куда идут деньги', fx: { approval: -4 }, result: 'Предприниматели остались при своём мнении.' }
+    ] },
+  { id: 'smog', kind: 'people', from: 'Жители', title: 'Смог над городом', w: 5,
+    cond: () => D.eco < 42,
+    text: () => 'Индекс экологии упал до ' + Math.round(D.eco) + '. Над городом стоит смог, у детей участились аллергии.',
+    opts: [
+      { label: 'Обязать предприятия поставить фильтры', fx: { budget: -22, eco: 6, rating: -1 }, result: 'Фильтры установят в течение полугода.' },
+      { label: 'Ничего не делать', fx: { approval: -6, rating: -2 }, result: 'Жители начали сбор подписей.' }
+    ] },
+  { id: 'power', kind: 'chs', from: 'Энергосбыт', title: 'Веерные отключения', w: 7,
+    cond: () => D.pRatio < 0.95,
+    text: () => 'ТЭЦ не справляется: мощности хватает на ' + Math.round(D.pRatio * 100) + '% потребления. Районы отключают по очереди.',
+    opts: [
+      { label: 'Купить электричество у соседей', fx: { budget: -18, approval: 1 }, result: 'Отключения прекратились на месяц. Нужна новая ТЭЦ.' },
+      { label: 'Продолжить отключения', fx: { approval: -6, rating: -2 }, result: 'Жители требуют решить проблему.' }
+    ] }
+];
+const EV = Object.fromEntries(EVENTS.map(e => [e.id, e]));
+
+function fireCovered(type) {
+  const fires = s.grid.map((c, i) => i).filter(i => s.grid[i].b === 'fire' && D.ok[i]);
+  return s.grid.some((c, i) => c.b === type && fires.some(j => { const [a, b] = xy(i), [x, y] = xy(j); return Math.abs(a - x) + Math.abs(b - y) <= B.fire.radius; }));
+}
+
+function freeTile() {
+  const all = s.grid.map((c, i) => i).filter(i => !s.grid[i].b && s.grid[i].t !== 'w');
+  const roadSide = all.filter(i => s.grid[i].t === 'g' && hasRoad(i));
+  if (roadSide.length) return pick(roadSide);
+  const grass = all.filter(i => s.grid[i].t === 'g');
+  return grass.length ? pick(grass) : (all.length ? pick(all) : -1);
+}
+
+function applyFx(fx) {
+  if (!fx) return;
+  if (fx.budget) s.budget += fx.budget;
+  if (fx.budgetPct && s.budget > 0) { const v = Math.round(s.budget * fx.budgetPct); s.budget += v; fx._budgetPct = v; }
+  if (fx.approval) { s.mood += fx.approval; s.approval = clamp(s.approval + fx.approval * 0.5, 0, 100); }
+  if (fx.rating) { s.rmood += fx.rating; s.rating = clamp(s.rating + fx.rating * 0.5, 0, 100); }
+  if (fx.risk) s.risk = clamp(s.risk + fx.risk, 0, 100);
+  if (fx.eco) s.ecoMod += fx.eco;
+  if (fx.setTax !== undefined) s.tax = fx.setTax;
+  if (fx.place) {
+    const i = freeTile();
+    if (i >= 0) { s.grid[i].t = 'g'; s.grid[i].b = fx.place; flash(i); log(B[fx.place].name + ' построен(а) по соглашению.'); }
+    else { s.budget += B[fx.place].cost * 0.5; log('Свободной земли не нашлось. Город получил компенсацию.'); }
+  }
+  if (fx.replacePark) {
+    const parks = s.grid.map((c, i) => i).filter(i => s.grid[i].b === 'park');
+    if (parks.length) { const i = pick(parks); s.grid[i].b = 'apt'; flash(i); }
+  }
+  if (fx.flood) {
+    const r = riverside().sort(() => Math.random() - 0.5).slice(0, fx.flood);
+    r.forEach(i => { s.grid[i].b = null; flash(i, '#3d7fa6'); });
+    if (r.length) log('Паводок разрушил ' + r.length + ' ' + plural(r.length, ['дом', 'дома', 'домов']) + '.');
+  }
+  if (fx.destroy) {
+    const list = s.grid.map((c, i) => i).filter(i => s.grid[i].b === fx.destroy);
+    if (list.length) { const i = pick(list); s.grid[i].b = null; flash(i, '#e25a4f'); log(B[fx.destroy].name + ' уничтожен(а).'); }
+  }
+  if (fx.later) {
+    const L = fx.later, okRoll = Math.random() < (L.p ?? 1);
+    s.queue.push({ day: s.day + L.days, title: L.title, text: okRoll ? L.text : L.failText, fx: okRoll ? L.fx : L.failFx, good: okRoll });
+  }
+  D = calc();
+}
+
+function fxChips(fx) {
+  const out = [];
+  const pushV = (label, v, invert) => { if (!v) return; const up = invert ? v < 0 : v > 0; out.push(`<span class="${up ? 'up' : 'down'}">${label} ${signed(v)}</span>`); };
+  if (fx.budget) out.push(`<span class="${fx.budget > 0 ? 'up' : 'down'}">Бюджет ${fx.budget > 0 ? '+' : '−'}${Math.abs(fx.budget)} млн</span>`);
+  if (fx._budgetPct) out.push(`<span class="down">Бюджет −${Math.abs(fx._budgetPct)} млн</span>`);
+  pushV('Доверие', fx.approval);
+  pushV('Область', fx.rating);
+  pushV('Экология', fx.eco);
+  pushV('Прокуратура', fx.risk, true);
+  if (fx.place) out.push(`<span class="up">+ ${B[fx.place].name}</span>`);
+  if (fx.replacePark) out.push('<span class="down">Парк → многоэтажка</span>');
+  if (fx.setTax !== undefined) out.push('<span>Сборы: ' + TAX_NAME[fx.setTax].toLowerCase() + '</span>');
+  return out.join('');
+}
+
+function triggerEvent() {
+  const elig = EVENTS.filter(e => {
+    const seen = s.seen[e.id];
+    if (seen !== undefined && (e.once || s.day - seen < 300)) return false;
+    try { return e.cond(); } catch (err) { return false; }
+  });
+  if (!elig.length) { s.nextEventDay = s.day + 10; return; }
+  const total = elig.reduce((a, e) => a + (e.w || 1), 0);
+  let r = Math.random() * total, ev = elig[0];
+  for (const e of elig) { r -= (e.w || 1); if (r <= 0) { ev = e; break; } }
+  s.seen[ev.id] = s.day;
+  s.nextEventDay = s.day + ri(22, 42);
+  if (ev.pre) ev.pre();
+  s.pending = { id: ev.id, text: typeof ev.text === 'function' ? ev.text() : ev.text };
+  showEvent();
+}
+
+function showEvent() {
+  const ev = EV[s.pending.id];
+  if (!ev) { s.pending = null; return; }
+  openModal(`
+    <div class="tag ${ev.kind}">${kindTag[ev.kind]}</div>
+    <h2>${esc(ev.title)}</h2>
+    <div class="from">${esc(ev.from)}</div>
+    <p>${esc(s.pending.text)}</p>
+    <div class="opts">${ev.opts.map((o, k) => {
+      const cost = o.cost ?? (o.fx && o.fx.budget < 0 ? o.fx.budget : 0);
+      return `<button class="opt" data-k="${k}"><span>${esc(o.label)}</span>${cost ? `<span class="cost">${money(cost)}</span>` : ''}</button>`;
+    }).join('')}</div>`);
+  $('modalCard').querySelectorAll('.opt').forEach(b => b.onclick = () => choose(ev, +b.dataset.k));
+}
+
+function choose(ev, k) {
+  const o = ev.opts[k];
+  let fx = o.fx, text = o.result;
+  if (o.run) { const r = o.run(); fx = r.fx; text = r.text; }
+  fx = Object.assign({}, fx);
+  applyFx(fx);
+  log(ev.title + ': ' + o.label.toLowerCase() + '.');
+  s.pending = null;
+  const chips = fxChips(fx);
+  openModal(`
+    <div class="tag ${ev.kind}">${kindTag[ev.kind]}</div>
+    <h2>${esc(ev.title)}</h2>
+    <p>${esc(text)}</p>
+    ${chips ? `<div class="fx">${chips}</div>` : ''}
+    <button class="primary" id="evOk">Продолжить</button>`);
+  $('evOk').onclick = closeModal;
+  save();
+}
+
+/* ---------- Ход времени ---------- */
+function stepDay() {
+  s.day++;
+  D = calc();
+  // население
+  const capEff = D.cap * (0.7 + 0.3 * Math.min(D.pRatio, D.wRatio));
+  const g = clamp((s.approval - 38) / 50, -1, 1);
+  if (s.pop < capEff) {
+    if (g > 0) s.pop += Math.min(capEff - s.pop, (capEff - s.pop) * 0.012 * g + 0.3);
+    else s.pop += s.pop * 0.0018 * g;
+  } else s.pop -= (s.pop - capEff) * 0.04;
+  s.pop = Math.max(0, s.pop);
+  // доверие и рейтинг
+  s.approval = clamp(s.approval + (clamp(D.target, 0, 100) - s.approval) * 0.012, 0, 100);
+  s.rating = clamp(s.rating + (clamp(D.rtarget, 0, 100) - s.rating) * 0.006, 0, 100);
+  s.mood *= 0.996; s.rmood *= 0.998; s.risk = Math.max(0, s.risk - 0.03);
+  // отложенные последствия
+  for (let q = s.queue.length - 1; q >= 0; q--) {
+    const it = s.queue[q];
+    if (it.day <= s.day) {
+      s.queue.splice(q, 1);
+      applyFx(it.fx);
+      toast(it.title + ': ' + it.text, it.good ? 'good' : 'bad');
+      log(it.title + ': ' + it.text);
+    }
+  }
+  if (s.day % 30 === 0) monthEnd();
+  if (checkOver()) return;
+  if (s.day % 360 === 0) { yearEnd(); return; }
+  if (s.day >= s.nextEventDay && !modalOpen) triggerEvent();
+}
+
+function monthEnd() {
+  const d = calc();
+  s.budget += d.net;
+  const m = (month() + 11) % 12;
+  const y = START_YEAR + Math.floor((s.day - 1) / 360);
+  log(`${MON_NOM[m]} ${y}: доходы ${Math.round(d.income)}, расходы ${Math.round(d.expense)} млн ₸.`);
+  if (s.budget < -50) { s.debtMonths++; toast(`Долг ${money(-s.budget)}. Месяцев подряд: ${s.debtMonths} из 3`, 'bad'); }
+  else { s.debtMonths = 0; if (s.budget < 0) toast('Бюджет в минусе: ' + money(s.budget), 'bad'); }
+  if (s.approval < 20) toast('Доверие жителей критически низкое', 'bad');
+  if (s.rating < 20) toast('Область недовольна вашей работой', 'bad');
+  if (s.risk > 70) toast('Прокуратура проявляет к вам большой интерес', 'bad');
+  if (month() === 10 && !has('tec')) toast('Скоро зима, а в городе нет ТЭЦ', 'bad');
+  D = calc();
+  save();
+}
+
+function yearEnd() {
+  const y = year() - 1;
+  let delta = 0;
+  const rows = s.goals.map(g => {
+    const G = GOALS[g.id], ok = G.ok(D, g.target);
+    delta += ok ? 6 : -8;
+    return `<div class="goal"><span class="mk ${ok ? 'ok' : 'no'}">${ok ? '✓' : '✕'}</span><span>${esc(G.label(g.target))}</span><span class="cur">${G.cur(D)}</span></div>`;
+  }).join('');
+  s.rmood += delta; s.rating = clamp(s.rating + delta * 0.5, 0, 100);
+  log(`Итоги ${y} года: рейтинг у области ${signed(delta)}.`);
+  s.goals = makeGoals();
+  const next = s.goals.map(g => `<div class="goal"><span class="mk wait">•</span><span>${esc(GOALS[g.id].label(g.target))}</span></div>`).join('');
+  openModal(`
+    <div class="tag">Аппарат акима области</div>
+    <h2>Итоги ${y} года</h2>
+    <div class="sec" style="margin-top:4px"><h3>Задачи года</h3>${rows}</div>
+    <div class="fx" style="margin-top:12px"><span class="${delta >= 0 ? 'up' : 'down'}">Область ${signed(delta)}</span></div>
+    <div class="sec"><h3>Задачи на ${y + 1} год</h3>${next}</div>
+    <div style="margin-top:18px"><button class="primary" id="yrOk">Продолжить</button></div>`);
+  $('yrOk').onclick = closeModal;
+  save();
+}
+
+function checkOver() {
+  let reason = null;
+  if (s.approval <= 10) reason = ['Отставка по требованию жителей', 'Жители вышли на площадь. После массовых обращений аким области принял вашу отставку.'];
+  else if (s.rating <= 10) reason = ['Освобождены от должности', 'Аким области внёс представление о вашем освобождении от должности за неудовлетворительную работу.'];
+  else if (s.risk >= 100) reason = ['Возбуждено уголовное дело', 'Антикоррупционная служба задержала вас прямо в кабинете. Город временно возглавил заместитель.'];
+  else if (s.debtMonths >= 3) reason = ['Финансовый крах', 'Город три месяца не может обслуживать долги. Область ввела внешнее управление, а вас отправили в отставку.'];
+  if (!reason) return false;
+  s.over = true;
+  const best = store.get(BEST_KEY);
+  const isBest = !best || s.day > best.days;
+  if (isBest) store.set(BEST_KEY, { days: s.day, akim: s.akim, city: s.city });
+  store.del(SAVE_KEY);
+  openModal(`
+    <div class="tag law">Указ акима области</div>
+    <h2>${reason[0]}</h2>
+    <p>${reason[1]}</p>
+    <div class="sec"><h3>Ваш срок</h3>
+      <div class="kv total"><span>${esc(s.akim)}, город ${esc(s.city)}</span><b>${termText(s.day)}</b></div>
+      <div class="kv"><span>Население</span><b>${fmtInt(s.pop)}</b></div>
+      <div class="kv"><span>Бюджет</span><b>${money(s.budget)}</b></div>
+      <div class="kv"><span>Доверие жителей</span><b>${Math.round(s.approval)}%</b></div>
+      <div class="kv"><span>Рейтинг у области</span><b>${Math.round(s.rating)}%</b></div>
+    </div>
+    ${isBest ? '<p class="best" style="margin-top:12px">Новый рекорд!</p>' : `<p class="hint" style="margin-top:12px">Рекорд: ${termText(best.days)} (${esc(best.akim)}, ${esc(best.city)})</p>`}
+    <div style="margin-top:16px"><button class="primary" id="overOk">Новый срок</button></div>`);
+  $('overOk').onclick = () => { closeModal(); showStart(); };
+  return true;
+}
+
+/* ---------- Строительство ---------- */
+function tapTile(i) {
+  if (!s || s.over) return;
+  const c = s.grid[i];
+  if (!tool) { selTile = i; showInfo(i); return; }
+  if (tool === 'demolish') {
+    if (c.b === 'akimat') return toast('Акимат снести нельзя');
+    if (c.b) {
+      if (s.budget < 1) return toast('Недостаточно средств', 'bad');
+      const name = B[c.b].name; c.b = null; s.budget -= 1; flash(i, '#e25a4f', -1); log('Снесено: ' + name.toLowerCase() + '.');
+    } else if (c.t === 'f') {
+      if (s.budget < 3) return toast('Недостаточно средств', 'bad');
+      c.t = 'g'; s.budget -= 3; flash(i, '#e25a4f', -3);
+    } else return;
+    D = calc(); render(); return;
+  }
+  const T = B[tool];
+  if (c.b) return toast('Участок занят');
+  if (T.unlock && s.pop < T.unlock) return toast(`Доступно с населения ${fmtInt(T.unlock)} чел.`);
+  if (c.t === 'w' && tool !== 'road') return toast('На реке можно построить только мост');
+  let cost = T.cost;
+  if (c.t === 'w') cost = 12;
+  if (c.t === 'f') cost += 3;
+  if (s.budget < cost) return toast(`Недостаточно средств: нужно ${money(cost)}`, 'bad');
+  s.budget -= cost;
+  if (c.t === 'f') c.t = 'g';
+  c.b = tool;
+  flash(i, '#3bb4d0', -cost);
+  D = calc();
+  if (tool !== 'road' && !T.noRoad && !D.ok[i]) toast('Здание не работает: рядом нет дороги', 'bad');
+  if (tool !== 'road') log('Построено: ' + T.name.toLowerCase() + '.');
+  render();
+}
+
+function flash(i, color = '#3bb4d0', amount = 0) { fxAnims.push({ i, t0: performance.now(), color, amount }); }
+
+/* ---------- Отрисовка карты ---------- */
+const cvs = $('map'), ctx = cvs.getContext('2d');
+let TS = 30, OY = 15, dpr = 1;
+const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function layout() {
+  const r = $('mapWrap').getBoundingClientRect();
+  TS = Math.max(16, Math.floor(Math.min(r.width / COLS, (r.height - 4) / (ROWS + 0.5))));
+  OY = Math.round(TS * 0.5);
+  dpr = Math.min(3, window.devicePixelRatio || 1);
+  cvs.style.width = TS * COLS + 'px';
+  cvs.style.height = (TS * ROWS + OY) + 'px';
+  cvs.width = TS * COLS * dpr;
+  cvs.height = (TS * ROWS + OY) * dpr;
+}
+
+function hexMix(hex, f) {
+  const n = parseInt(hex.slice(1), 16);
+  let r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  if (f < 0) { r *= 1 + f; g *= 1 + f; b *= 1 + f; }
+  else { r += (255 - r) * f; g += (255 - g) * f; b += (255 - b) * f; }
+  return `rgb(${r | 0},${g | 0},${b | 0})`;
+}
+
+function box(c, x, y, w, d, h, top, front, t) {
+  c.fillStyle = 'rgba(40,38,22,.22)';
+  c.fillRect(x + h * 0.5, y + d * 0.15, w, d * 0.85);
+  c.fillStyle = front; c.fillRect(x, y + d - h, w, h);
+  c.fillStyle = top; c.fillRect(x, y - h, w, d);
+  c.fillStyle = 'rgba(255,255,255,.22)'; c.fillRect(x, y - h, w, Math.max(1, t * 0.025));
+}
+function windows(c, x, y, w, h, cols, rows, n, colA = '#5e7f93', colB = '#f0d58a') {
+  const gw = w / cols, gh = h / rows;
+  for (let r = 0; r < rows; r++) for (let k = 0; k < cols; k++) {
+    const lit = ((n * 997 + r * 31 + k * 17) % 10) < 3;
+    c.fillStyle = lit ? colB : colA;
+    c.fillRect(x + k * gw + gw * 0.25, y + r * gh + gh * 0.25, gw * 0.5, gh * 0.45);
+  }
+}
+function tree(c, x, y, r) {
+  c.fillStyle = 'rgba(30,40,20,.25)'; c.beginPath(); c.ellipse(x + r * 0.4, y + r * 0.5, r, r * 0.6, 0, 0, 7); c.fill();
+  c.fillStyle = '#466e3f'; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill();
+  c.fillStyle = '#679653'; c.beginPath(); c.arc(x - r * 0.3, y - r * 0.3, r * 0.55, 0, 7); c.fill();
+}
+function puffs(c, x, y, t, time, big) {
+  for (let k = 0; k < 3; k++) {
+    const ph = reduceMotion ? k / 3 : ((time / 2200 + k / 3) % 1);
+    const r = t * (big ? 0.09 : 0.06) * (1 + ph * 1.6);
+    c.fillStyle = `rgba(235,235,228,${0.75 * (1 - ph)})`;
+    c.beginPath(); c.arc(x + ph * t * 0.18, y - ph * t * 0.55, r, 0, 7); c.fill();
+  }
+}
+
+function groundColor(c) {
+  const v = (c.n - 0.5) * 0.08;
+  return hexMix(c.t === 'f' ? '#9fa36d' : '#bab381', v);
+}
+
+function drawRoad(c, px, py, t, nb, bridge) {
+  const m = t * 0.28, cx = px + t / 2, cy = py + t / 2;
+  if (bridge) { c.fillStyle = 'rgba(20,40,60,.25)'; c.fillRect(px + t * 0.18, py + t * 0.22, t * 0.7, t * 0.7); }
+  c.fillStyle = '#596064';
+  c.fillRect(cx - m, cy - m, m * 2, m * 2);
+  if (nb.u) c.fillRect(cx - m, py, m * 2, t / 2);
+  if (nb.d) c.fillRect(cx - m, cy, m * 2, t / 2);
+  if (nb.l) c.fillRect(px, cy - m, t / 2, m * 2);
+  if (nb.r) c.fillRect(cx, cy - m, t / 2, m * 2);
+  c.strokeStyle = '#d8cf9e'; c.lineWidth = Math.max(1, t * 0.035); c.setLineDash([t * 0.09, t * 0.08]);
+  c.beginPath();
+  const any = nb.u || nb.d || nb.l || nb.r;
+  if (nb.u) { c.moveTo(cx, py); c.lineTo(cx, cy); }
+  if (nb.d) { c.moveTo(cx, cy); c.lineTo(cx, py + t); }
+  if (nb.l) { c.moveTo(px, cy); c.lineTo(cx, cy); }
+  if (nb.r) { c.moveTo(cx, cy); c.lineTo(px + t, cy); }
+  if (!any) { c.moveTo(cx - m * 0.6, cy); c.lineTo(cx + m * 0.6, cy); }
+  c.stroke(); c.setLineDash([]);
+  if (bridge) {
+    c.strokeStyle = '#d9d3bd'; c.lineWidth = Math.max(1, t * 0.05);
+    c.beginPath();
+    const vert = nb.u || nb.d, hor = nb.l || nb.r;
+    if (vert || !hor) { c.moveTo(cx - m, py); c.lineTo(cx - m, py + t); c.moveTo(cx + m, py); c.lineTo(cx + m, py + t); }
+    if (hor) { c.moveTo(px, cy - m); c.lineTo(px + t, cy - m); c.moveTo(px, cy + m); c.lineTo(px + t, cy + m); }
+    c.stroke();
+  }
+}
+
+function drawBuilding(c, b, px, py, t, n, time) {
+  const X = f => px + t * f, Y = f => py + t * f;
+  switch (b) {
+    case 'house': {
+      const roofs = ['#b0503a', '#5d7f9a', '#7f8a52', '#8f5a3c'];
+      const roof = roofs[Math.floor(n * roofs.length) % roofs.length];
+      c.fillStyle = 'rgba(255,255,255,.16)'; c.fillRect(X(0.1), Y(0.12), t * 0.8, t * 0.8);
+      box(c, X(0.2), Y(0.36), t * 0.6, t * 0.44, t * 0.2, roof, '#eadfc6', t);
+      c.fillStyle = hexMix(roof, -0.25); c.fillRect(X(0.2), Y(0.36) - t * 0.2 + t * 0.2, t * 0.6, Math.max(1, t * 0.03));
+      c.fillStyle = '#6d4c3a'; c.fillRect(X(0.44), Y(0.66), t * 0.1, t * 0.14);
+      c.fillStyle = '#7d9fb3'; c.fillRect(X(0.26), Y(0.68), t * 0.1, t * 0.07); c.fillRect(X(0.62), Y(0.68), t * 0.1, t * 0.07);
+      break;
+    }
+    case 'apt': {
+      const h = t * 0.62;
+      box(c, X(0.15), Y(0.22), t * 0.7, t * 0.62, h, '#a3aaad', '#d9d2c4', t);
+      windows(c, X(0.15), Y(0.84) - h, t * 0.7, h, 4, 5, Math.floor(n * 1000));
+      break;
+    }
+    case 'office': {
+      const h = t * 0.86;
+      box(c, X(0.2), Y(0.24), t * 0.6, t * 0.6, h, '#8dbad0', '#4f7f9e', t);
+      c.fillStyle = 'rgba(255,255,255,.25)';
+      for (let k = 1; k < 6; k++) c.fillRect(X(0.2), Y(0.84) - h + k * h / 6, t * 0.6, Math.max(1, t * 0.02));
+      c.fillStyle = 'rgba(255,255,255,.15)'; c.fillRect(X(0.2), Y(0.84) - h, t * 0.12, h);
+      break;
+    }
+    case 'school': {
+      c.fillStyle = '#a5b76e'; c.fillRect(X(0.08), Y(0.06), t * 0.84, t * 0.3);
+      c.strokeStyle = 'rgba(255,255,255,.7)'; c.lineWidth = Math.max(1, t * 0.025); c.strokeRect(X(0.14), Y(0.1), t * 0.72, t * 0.22);
+      box(c, X(0.08), Y(0.42), t * 0.84, t * 0.46, t * 0.22, '#6f9161', '#ebdfc2', t);
+      windows(c, X(0.08), Y(0.88) - t * 0.22, t * 0.84, t * 0.22, 6, 1, 3, '#6d8fa5', '#6d8fa5');
+      c.strokeStyle = '#555'; c.lineWidth = Math.max(1, t * 0.025);
+      c.beginPath(); c.moveTo(X(0.18), Y(0.42) - t * 0.22); c.lineTo(X(0.18), Y(0.42) - t * 0.52); c.stroke();
+      c.fillStyle = '#3bb4d0'; c.fillRect(X(0.18), Y(0.42) - t * 0.52, t * 0.2, t * 0.12);
+      break;
+    }
+    case 'clinic': {
+      box(c, X(0.12), Y(0.3), t * 0.76, t * 0.56, t * 0.3, '#e3e8e8', '#f3f2ed', t);
+      windows(c, X(0.12), Y(0.86) - t * 0.3, t * 0.76, t * 0.3, 5, 2, 7, '#7fa3b6', '#7fa3b6');
+      const cx = X(0.5), cy = Y(0.3) - t * 0.3 + t * 0.28;
+      c.fillStyle = '#d33d34'; c.fillRect(cx - t * 0.05, cy - t * 0.16, t * 0.1, t * 0.32); c.fillRect(cx - t * 0.16, cy - t * 0.05, t * 0.32, t * 0.1);
+      break;
+    }
+    case 'park': {
+      c.fillStyle = '#84a95c'; c.fillRect(X(0.05), Y(0.05), t * 0.9, t * 0.9);
+      c.strokeStyle = '#ddd3a8'; c.lineWidth = Math.max(1.5, t * 0.07);
+      c.beginPath(); c.moveTo(X(0.05), Y(0.75)); c.quadraticCurveTo(X(0.5), Y(0.45), X(0.95), Y(0.3)); c.stroke();
+      c.fillStyle = '#6aa8c4'; c.beginPath(); c.ellipse(X(0.68), Y(0.7), t * 0.14, t * 0.09, 0, 0, 7); c.fill();
+      tree(c, X(0.26), Y(0.3), t * 0.13); tree(c, X(0.7), Y(0.22), t * 0.11); tree(c, X(0.3), Y(0.78), t * 0.1);
+      break;
+    }
+    case 'market': {
+      box(c, X(0.1), Y(0.32), t * 0.8, t * 0.56, t * 0.16, '#f2ede0', '#e2d9c4', t);
+      const sw = t * 0.8 / 6;
+      for (let k = 0; k < 6; k += 2) { c.fillStyle = '#c8473a'; c.fillRect(X(0.1) + k * sw, Y(0.32) - t * 0.16, sw, t * 0.56); }
+      c.fillStyle = '#6d4c3a'; c.fillRect(X(0.2), Y(0.88) - t * 0.1, t * 0.6, t * 0.06);
+      break;
+    }
+    case 'factory': {
+      box(c, X(0.08), Y(0.4), t * 0.84, t * 0.5, t * 0.26, '#8a8e8e', '#9b9e9b', t);
+      c.fillStyle = '#6f7474';
+      for (let k = 0; k < 4; k++) { const x0 = X(0.08) + k * t * 0.21; c.beginPath(); c.moveTo(x0, Y(0.4) - t * 0.26 + t * 0.5); c.lineTo(x0 + t * 0.21, Y(0.4) - t * 0.26); c.lineTo(x0 + t * 0.21, Y(0.4) - t * 0.26 + t * 0.5); c.fill(); }
+      box(c, X(0.72), Y(0.2), t * 0.1, t * 0.1, t * 0.6, '#6e463b', '#8c5b4b', t);
+      puffs(c, X(0.77), Y(0.2) - t * 0.6, t, time + n * 3000, false);
+      break;
+    }
+    case 'tec': {
+      box(c, X(0.06), Y(0.5), t * 0.48, t * 0.4, t * 0.3, '#9aa0a2', '#7d8385', t);
+      const tower = (cx, base, w, h) => {
+        c.fillStyle = 'rgba(40,38,22,.22)'; c.beginPath(); c.ellipse(cx + w * 0.4, base, w * 0.6, w * 0.25, 0, 0, 7); c.fill();
+        c.fillStyle = '#dcdcd4';
+        c.beginPath(); c.moveTo(cx - w / 2, base); c.quadraticCurveTo(cx - w * 0.25, base - h * 0.6, cx - w * 0.34, base - h); c.lineTo(cx + w * 0.34, base - h); c.quadraticCurveTo(cx + w * 0.25, base - h * 0.6, cx + w / 2, base); c.closePath(); c.fill();
+        c.fillStyle = '#bdbdb4'; c.fillRect(cx, base - h, w * 0.34, h);
+        c.fillStyle = '#c04a3c'; c.fillRect(cx - w * 0.3, base - h * 0.85, w * 0.6, h * 0.1);
+        c.fillStyle = '#8f8f88'; c.beginPath(); c.ellipse(cx, base - h, w * 0.34, w * 0.1, 0, 0, 7); c.fill();
+        puffs(c, cx, base - h, t, time + cx * 7, true);
+      };
+      tower(X(0.62), Y(0.62), t * 0.3, t * 0.52);
+      tower(X(0.82), Y(0.9), t * 0.28, t * 0.46);
+      break;
+    }
+    case 'vodo': {
+      c.fillStyle = '#a3ab9c'; c.fillRect(X(0.06), Y(0.08), t * 0.88, t * 0.84);
+      const tank = (cx, cy, r) => {
+        c.fillStyle = 'rgba(40,38,22,.22)'; c.beginPath(); c.ellipse(cx + r * 0.5, cy + r * 0.3, r, r * 0.6, 0, 0, 7); c.fill();
+        c.fillStyle = '#5f97b3'; c.fillRect(cx - r, cy - r * 0.6, r * 2, r * 0.6);
+        c.beginPath(); c.ellipse(cx, cy, r, r * 0.55, 0, 0, Math.PI); c.fill();
+        c.fillStyle = '#9ccbe0'; c.beginPath(); c.ellipse(cx, cy - r * 0.6, r, r * 0.55, 0, 0, 7); c.fill();
+        c.strokeStyle = '#e5f2f7'; c.lineWidth = Math.max(1, t * 0.02); c.stroke();
+      };
+      tank(X(0.32), Y(0.42), t * 0.2); tank(X(0.66), Y(0.7), t * 0.19);
+      break;
+    }
+    case 'police': {
+      box(c, X(0.14), Y(0.34), t * 0.72, t * 0.52, t * 0.26, '#2f5c8a', '#e3e8ec', t);
+      c.fillStyle = '#2f5c8a'; c.fillRect(X(0.14), Y(0.86) - t * 0.14, t * 0.72, t * 0.04);
+      windows(c, X(0.14), Y(0.86) - t * 0.26, t * 0.72, t * 0.12, 4, 1, 5, '#6d8fa5', '#6d8fa5');
+      c.fillStyle = '#d33d34'; c.fillRect(X(0.4), Y(0.34) - t * 0.26 + t * 0.2, t * 0.1, t * 0.07);
+      c.fillStyle = '#3b7be0'; c.fillRect(X(0.5), Y(0.34) - t * 0.26 + t * 0.2, t * 0.1, t * 0.07);
+      break;
+    }
+    case 'fire': {
+      box(c, X(0.1), Y(0.36), t * 0.6, t * 0.5, t * 0.26, '#b33a30', '#e6e0d8', t);
+      c.fillStyle = '#7a2d26'; c.fillRect(X(0.16), Y(0.86) - t * 0.18, t * 0.2, t * 0.18); c.fillRect(X(0.42), Y(0.86) - t * 0.18, t * 0.2, t * 0.18);
+      box(c, X(0.72), Y(0.3), t * 0.16, t * 0.16, t * 0.56, '#8f2f27', '#d8d0c6', t);
+      break;
+    }
+    case 'akimat': {
+      c.fillStyle = 'rgba(255,255,255,.2)'; c.fillRect(X(0.02), Y(0.06), t * 0.96, t * 0.92);
+      const h = t * 0.36;
+      box(c, X(0.06), Y(0.34), t * 0.88, t * 0.58, h, '#cdd6da', '#f3f1ea', t);
+      c.fillStyle = 'rgba(120,120,110,.35)';
+      for (let k = 0; k < 6; k++) c.fillRect(X(0.12) + k * t * 0.145, Y(0.92) - h + t * 0.06, t * 0.03, h - t * 0.1);
+      c.fillStyle = '#c7c2b4'; c.fillRect(X(0.06), Y(0.92) - t * 0.05, t * 0.88, t * 0.05);
+      c.strokeStyle = '#555'; c.lineWidth = Math.max(1, t * 0.025);
+      c.beginPath(); c.moveTo(X(0.5), Y(0.34) - h + t * 0.1); c.lineTo(X(0.5), Y(0.34) - h - t * 0.28); c.stroke();
+      c.fillStyle = '#3bb4d0'; c.fillRect(X(0.5), Y(0.34) - h - t * 0.28, t * 0.26, t * 0.15);
+      c.fillStyle = '#e8b84a'; c.beginPath(); c.arc(X(0.61), Y(0.34) - h - t * 0.205, t * 0.035, 0, 7); c.fill();
+      break;
+    }
+  }
+}
+
+function render(time = performance.now()) {
+  if (!s) return;
+  const c = ctx, t = TS;
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.clearRect(0, 0, TS * COLS, TS * ROWS + OY);
+  c.save(); c.translate(0, OY);
+  // земля и вода
+  for (let i = 0; i < N; i++) {
+    const [x, y] = xy(i), px = x * t, py = y * t, cell = s.grid[i];
+    if (cell.t === 'w') {
+      c.fillStyle = hexMix('#3d7fa6', (cell.n - 0.5) * 0.06); c.fillRect(px, py, t, t);
+      c.strokeStyle = 'rgba(255,255,255,.28)'; c.lineWidth = Math.max(1, t * 0.03);
+      const off = reduceMotion ? 0 : Math.sin(time / 900 + i) * t * 0.06;
+      c.beginPath();
+      c.moveTo(px + t * 0.15 + off, py + t * 0.35); c.quadraticCurveTo(px + t * 0.3 + off, py + t * 0.28, px + t * 0.45 + off, py + t * 0.35);
+      c.moveTo(px + t * 0.5 - off, py + t * 0.7); c.quadraticCurveTo(px + t * 0.65 - off, py + t * 0.63, px + t * 0.8 - off, py + t * 0.7);
+      c.stroke();
+    } else {
+      c.fillStyle = groundColor(cell); c.fillRect(px, py, t, t);
+      c.strokeStyle = 'rgba(60,55,30,.08)'; c.lineWidth = 1; c.strokeRect(px + 0.5, py + 0.5, t - 1, t - 1);
+    }
+  }
+  // дороги
+  for (let i = 0; i < N; i++) {
+    if (s.grid[i].b !== 'road') continue;
+    const [x, y] = xy(i), R = j => j >= 0 && j < N && s.grid[j].b === 'road';
+    drawRoad(c, x * t, y * t, t, { u: y > 0 && R(i - COLS), d: y < ROWS - 1 && R(i + COLS), l: x > 0 && R(i - 1), r: x < COLS - 1 && R(i + 1) }, s.grid[i].t === 'w');
+  }
+  // подсветка охвата
+  const svcKey = tool && B[tool] && B[tool].service;
+  if (svcKey) {
+    const covered = D.covered[svcKey] || new Set();
+    for (let i = 0; i < N; i++) {
+      const cell = s.grid[i]; const [x, y] = xy(i);
+      if (cell.b === tool) {
+        const r = B[tool].radius;
+        for (let j = 0; j < N; j++) { const [a, b2] = xy(j); if (Math.abs(a - x) + Math.abs(b2 - y) <= r) { c.fillStyle = 'rgba(59,180,208,.14)'; c.fillRect(a * t, b2 * t, t, t); } }
+      }
+    }
+    for (let i = 0; i < N; i++) {
+      if (!isRes(s.grid[i].b)) continue;
+      const [x, y] = xy(i);
+      c.fillStyle = covered.has(i) ? 'rgba(108,196,137,.55)' : 'rgba(226,90,79,.55)';
+      c.fillRect(x * t + 2, y * t + 2, t - 4, t - 4);
+    }
+  }
+  // здания и лес (сверху вниз)
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+    const i = idx(x, y), cell = s.grid[i], px = x * t, py = y * t;
+    if (!cell.b && cell.t === 'f') {
+      tree(c, px + t * 0.3, py + t * 0.35, t * 0.17); tree(c, px + t * 0.68, py + t * 0.45, t * 0.15); tree(c, px + t * 0.42, py + t * 0.75, t * 0.16);
+    }
+    if (cell.b && cell.b !== 'road') {
+      drawBuilding(c, cell.b, px, py, t, cell.n, time);
+      if (!D.ok[i]) {
+        const bx = px + t * 0.82, by = py + t * 0.2;
+        c.fillStyle = '#e25a4f'; c.beginPath(); c.arc(bx, by, t * 0.14, 0, 7); c.fill();
+        c.fillStyle = '#fff'; c.font = `700 ${Math.round(t * 0.22)}px Golos Text, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('!', bx, by + 0.5);
+      }
+    }
+  }
+  // выбранный участок
+  if (selTile >= 0 && !tool) {
+    const [x, y] = xy(selTile);
+    c.strokeStyle = '#3bb4d0'; c.lineWidth = 2; c.strokeRect(x * t + 1, y * t + 1, t - 2, t - 2);
+  }
+  // анимации
+  for (let k = fxAnims.length - 1; k >= 0; k--) {
+    const a = fxAnims[k], p = (time - a.t0) / 700;
+    if (p >= 1) { fxAnims.splice(k, 1); continue; }
+    const [x, y] = xy(a.i);
+    c.strokeStyle = a.color; c.globalAlpha = 1 - p; c.lineWidth = 2;
+    c.strokeRect(x * t - p * t * 0.2, y * t - p * t * 0.2, t + p * t * 0.4, t + p * t * 0.4);
+    if (a.amount) {
+      c.fillStyle = '#fff'; c.font = `700 ${Math.round(t * 0.3)}px Golos Text, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText(signed(a.amount), x * t + t / 2, y * t - p * t * 0.6);
+    }
+    c.globalAlpha = 1;
+  }
+  c.restore();
+}
+
+/* ---------- Интерфейс ---------- */
+function toast(text, kind = '') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + kind; el.textContent = text;
+  const box = $('toasts'); box.appendChild(el);
+  while (box.children.length > 3) box.firstChild.remove();
+  setTimeout(() => el.remove(), 2800);
+}
+
+function levelColor(v) { return v >= 50 ? 'var(--good)' : v >= 25 ? 'var(--warn)' : 'var(--bad)'; }
+function setChip(id, valHtml, pct, alarm) {
+  const el = $(id);
+  el.querySelector('.v').innerHTML = valHtml;
+  const bar = el.querySelector('.bar i');
+  bar.style.width = clamp(pct, 0, 100) + '%'; bar.style.background = levelColor(pct);
+  el.classList.toggle('alarm', !!alarm);
+}
+
+function updateHud() {
+  if (!s) return;
+  $('cityLbl').textContent = s.city;
+  $('popLbl').textContent = `${s.akim} · население ${fmtInt(s.pop)}`;
+  $('dateLbl').textContent = dateText();
+  const bPct = s.budget >= 0 ? 50 + Math.min(50, s.budget / 4) : Math.max(0, 50 + s.budget);
+  setChip('cBudget', `${Math.round(s.budget)}<small> млн</small>`, bPct, s.budget < -50);
+  setChip('cAppr', Math.round(s.approval) + '<small>%</small>', s.approval, s.approval < 20);
+  setChip('cRate', Math.round(s.rating) + '<small>%</small>', s.rating, s.rating < 20);
+  setChip('cEco', String(Math.round(D.eco)), D.eco, false);
+  const rp = $('riskPill');
+  rp.hidden = s.risk < 1;
+  rp.textContent = 'Интерес прокуратуры: ' + Math.round(s.risk) + '%';
+  document.querySelectorAll('.speeds button').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.speed === speed)));
+  // блокировки в доке
+  document.querySelectorAll('.item').forEach(el => {
+    const T = B[el.dataset.tool];
+    if (!T || !T.unlock) return;
+    const locked = s.pop < T.unlock;
+    el.classList.toggle('locked', locked);
+    el.querySelector('.pr').textContent = locked ? 'с ' + fmtInt(T.unlock) + ' жит.' : money(T.cost);
+  });
+}
+
+function buildTabs() {
+  $('tabs').innerHTML = CATS.map(([k, n]) => `<button role="tab" data-cat="${k}" aria-selected="${k === cat}">${n}</button>`).join('');
+  $('tabs').querySelectorAll('button').forEach(b => b.onclick = () => { cat = b.dataset.cat; buildTabs(); buildItems(); if (cat === 'demolish') setTool('demolish'); });
+}
+function buildItems() {
+  const box = $('items');
+  if (cat === 'demolish') {
+    box.innerHTML = `<button class="item" data-tool="demolish" aria-pressed="${tool === 'demolish'}"><canvas width="120" height="100"></canvas><span class="nm">Снести</span><span class="pr">1 млн · лес 3</span></button>`;
+  } else {
+    const list = Object.entries(B).filter(([, T]) => T.cat === cat);
+    box.innerHTML = list.map(([k, T]) => `<button class="item" data-tool="${k}" aria-pressed="${tool === k}"><canvas width="120" height="100"></canvas><span class="nm">${T.name}</span><span class="pr">${money(T.cost)}</span></button>`).join('');
+  }
+  box.querySelectorAll('.item').forEach(el => {
+    const cv = el.querySelector('canvas'), c = cv.getContext('2d'), k = el.dataset.tool;
+    const tt = 72, px = (120 - tt) / 2, py = 100 - tt - 6;
+    c.fillStyle = '#bab381'; c.fillRect(px, py, tt, tt);
+    if (k === 'road') drawRoad(c, px, py, tt, { l: true, r: true }, false);
+    else if (k === 'demolish') {
+      c.strokeStyle = '#e25a4f'; c.lineWidth = 7; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(px + 18, py + 18); c.lineTo(px + tt - 18, py + tt - 18); c.moveTo(px + tt - 18, py + 18); c.lineTo(px + 18, py + tt - 18); c.stroke();
+    } else drawBuilding(c, k, px, py, tt, 0.3, 0);
+    el.onclick = () => setTool(tool === k ? null : k);
+  });
+  updateHud();
+}
+function setTool(k) {
+  tool = k; selTile = -1; $('info').hidden = true;
+  document.querySelectorAll('.item').forEach(el => el.setAttribute('aria-pressed', String(el.dataset.tool === tool)));
+  const hint = $('toolHint');
+  if (!tool) { hint.hidden = true; render(); return; }
+  hint.hidden = false;
+  if (tool === 'demolish') $('toolHintText').innerHTML = '<b>Снос</b> · нажмите на здание или лес';
+  else {
+    const T = B[tool];
+    const extra = T.service ? ' · зелёным отмечены дома в зоне охвата' : (tool === 'road' ? ' · мост через реку 12 млн' : (T.noRoad ? '' : ' · ставьте рядом с дорогой'));
+    $('toolHintText').innerHTML = `<b>${T.name}</b> · ${money(T.cost)}${extra}`;
+  }
+  render();
+}
+
+function showInfo(i) {
+  const c = s.grid[i];
+  let title, lines = [], canDemolish = false;
+  if (c.b) {
+    const T = B[c.b]; title = T.name;
+    lines.push(T.desc);
+    const st = [];
+    if (T.cap) st.push(`Жильё: ${T.cap} чел.`);
+    if (T.jobs) st.push(`Рабочих мест: ${T.jobs}`);
+    if (T.income) st.push(`Доход: ${T.income} млн/мес`);
+    if (T.upkeep) st.push(`Содержание: ${T.upkeep} млн/мес`);
+    if (T.pOut) st.push(`Электричество: +${T.pOut}`);
+    if (T.wOut) st.push(`Вода: +${T.wOut}`);
+    if (T.eco) st.push(`Экология: ${signed(T.eco)}`);
+    if (st.length) lines.push(st.join(' · '));
+    if (isRes(c.b)) {
+      const miss = Object.keys(SERVICE_NAME).filter(k => !(D.covered[k] && D.covered[k].has(i))).map(k => SERVICE_NAME[k]);
+      lines.push(miss.length ? 'Не охвачен: ' + miss.join(', ') + '.' : 'Все службы рядом.');
+    }
+    if (!D.ok[i]) lines.push('<span class="neg">Не работает: рядом нет дороги.</span>');
+    canDemolish = c.b !== 'akimat';
+  } else if (c.t === 'w') { title = 'Река'; lines.push('Здесь можно построить только мост (инструмент «Дорога»).'); }
+  else if (c.t === 'f') { title = 'Лес'; lines.push('Расчистка под стройку стоит 3 млн ₸ и немного ухудшает экологию.'); }
+  else { title = 'Свободный участок'; lines.push('Выберите здание внизу и нажмите на участок.'); }
+  $('infoCard').innerHTML = `<button class="closeX" id="infoX" aria-label="Закрыть">×</button><h2>${title}</h2>${lines.map(l => `<p style="margin:0 0 6px;font-size:13px">${l}</p>`).join('')}
+    <div class="btns">${canDemolish ? '<button class="danger" id="infoDel">Снести · 1 млн</button>' : ''}<button id="infoClose">Закрыть</button></div>`;
+  $('info').hidden = false;
+  const close = () => { $('info').hidden = true; selTile = -1; render(); };
+  $('infoX').onclick = close; $('infoClose').onclick = close;
+  if (canDemolish) $('infoDel').onclick = () => {
+    if (s.budget < 1) return toast('Недостаточно средств', 'bad');
+    log('Снесено: ' + B[c.b].name.toLowerCase() + '.');
+    c.b = null; s.budget -= 1; flash(i, '#e25a4f', -1); D = calc(); close(); updateHud();
+  };
+  render();
+}
+
+function openSheet() {
+  if (!s) return;
+  const d = D, wasSpeed = speed;
+  pauseFor();
+  const kv = (k, v, cls = '') => `<div class="kv"><span>${k}</span><b class="${cls}">${v}</b></div>`;
+  const pct = v => Math.round(v * 100) + '%';
+  const covCls = v => v >= 0.8 ? 'pos' : v >= 0.5 ? 'mid' : 'neg';
+  const goals = s.goals.map(g => { const G = GOALS[g.id], ok = G.ok(d, g.target); return `<div class="goal"><span class="mk ${ok ? 'ok' : 'wait'}">${ok ? '✓' : '•'}</span><span>${esc(G.label(g.target))}</span><span class="cur">${G.cur(d)}</span></div>`; }).join('');
+  const parts = d.parts.filter(p => Math.abs(p[1]) >= 0.5).sort((a, b) => a[1] - b[1]).map(p => kv(p[0], signed(p[1]), p[1] > 0 ? 'pos' : 'neg')).join('');
+  $('sheetCard').innerHTML = `
+    <button class="closeX" id="sheetX" aria-label="Закрыть">×</button>
+    <div class="tag">Сводка акима</div>
+    <h2>${esc(s.city)}</h2>
+    <div class="from">${dateText()} · в должности ${termText(s.day)}</div>
+    <div class="sec"><h3>Задачи области на ${year()} год</h3>${goals}</div>
+    <div class="sec"><h3>Бюджет в месяц</h3>
+      ${kv('Налоги с жителей', '+' + d.taxInc.toFixed(1))}
+      ${kv('Доходы предприятий', '+' + d.bizInc.toFixed(1))}
+      ${kv('Трансферт из области', '+' + d.transfer.toFixed(1))}
+      ${kv('Содержание зданий', '−' + d.upkeep.toFixed(1))}
+      ${d.interest ? kv('Проценты по долгу', '−' + d.interest.toFixed(1), 'neg') : ''}
+      <div class="kv total"><span>Итого, млн ₸</span><b class="${d.net >= 0 ? 'pos' : 'neg'}">${d.net >= 0 ? '+' : '−'}${Math.abs(d.net).toFixed(1)}</b></div>
+    </div>
+    <div class="sec"><h3>Местные сборы</h3>
+      <div class="seg" id="taxSeg">${TAX_NAME.map((n, k) => `<button data-k="${k}" aria-pressed="${k === s.tax}">${['−40%', '−20%', 'Норма', '+20%', '+40%'][k]}</button>`).join('')}</div>
+      <div class="hint">${TAX_NAME[s.tax]} ставка. Выше сборы — больше денег, но меньше доверия.</div>
+    </div>
+    <div class="sec"><h3>Город</h3>
+      ${kv('Население / вместимость', fmtInt(s.pop) + ' / ' + fmtInt(d.cap))}
+      ${kv('Рабочие места', fmtInt(d.jobs))}
+      ${kv('Безработица', pct(d.unemp), d.unemp > 0.1 ? 'neg' : d.unemp > 0.04 ? 'mid' : 'pos')}
+      ${kv('Электричество', Math.round(d.pDem) + ' из ' + Math.round(d.pOut), d.pRatio < 1 ? 'neg' : 'pos')}
+      ${kv('Вода', Math.round(d.wDem) + ' из ' + Math.round(d.wOut), d.wRatio < 1 ? 'neg' : 'pos')}
+      ${kv('Охват школами', pct(d.cov.edu), covCls(d.cov.edu))}
+      ${kv('Охват поликлиниками', pct(d.cov.health), covCls(d.cov.health))}
+      ${kv('Охват полицией', pct(d.cov.safety), covCls(d.cov.safety))}
+      ${kv('Охват пожарными', pct(d.cov.fire), covCls(d.cov.fire))}
+      ${d.noRoad ? kv('Здания без дороги', d.noRoad, 'neg') : ''}
+    </div>
+    <div class="sec"><h3>Что влияет на доверие</h3>${parts || '<div class="hint">Пока всё ровно.</div>'}
+      <div class="hint">Доверие постепенно движется к ${Math.round(clamp(d.target, 0, 100))}%.</div></div>
+    <div class="sec"><h3>Журнал</h3><div class="log">${s.log.slice(0, 14).map(l => `<div><span>${dateText(l.d)}</span>${esc(l.text)}</div>`).join('')}</div></div>
+    <div class="sec stack">
+      <button class="ghost" id="toMenu">Сохранить и выйти в меню</button>
+    </div>`;
+  $('sheet').hidden = false;
+  const close = () => { $('sheet').hidden = true; modalOpen = false; speed = wasSpeed; updateHud(); };
+  $('sheetX').onclick = close;
+  $('sheet').onclick = e => { if (e.target === $('sheet')) close(); };
+  $('taxSeg').querySelectorAll('button').forEach(b => b.onclick = () => { s.tax = +b.dataset.k; D = calc(); $('sheet').hidden = true; modalOpen = false; speed = wasSpeed; openSheet(); });
+  $('toMenu').onclick = () => { save(); $('sheet').hidden = true; modalOpen = false; showStart(); };
+}
+
+function pauseFor() { if (!modalOpen) savedSpeed = speed; modalOpen = true; }
+function openModal(html) {
+  pauseFor();
+  $('modalCard').innerHTML = html;
+  $('modal').hidden = false;
+  $('modalCard').scrollTop = 0;
+}
+function closeModal() {
+  $('modal').hidden = true; modalOpen = false; speed = savedSpeed;
+  updateHud(); render();
+}
+
+/* ---------- Сохранение ---------- */
+function save() { if (s && !s.over) store.set(SAVE_KEY, s); }
+function load(data) {
+  if (!data || !data.grid || data.grid.length !== N) return false;
+  s = data; D = calc(); return true;
+}
+
+/* ---------- Экраны ---------- */
+const CITY_A = ['Ақ', 'Қара', 'Сары', 'Көк', 'Жаңа', 'Ұлы', 'Тас', 'Алтын', 'Күн', 'Жел'];
+const CITY_B = ['су', 'тау', 'жар', 'өзен', 'арал', 'дала', 'бұлақ', 'терек', 'қайың', 'тоған'];
+function showStart() {
+  s = null; tool = null; modalOpen = true;
+  $('start').hidden = false;
+  const sv = store.get(SAVE_KEY), best = store.get(BEST_KEY);
+  const cont = $('btnCont');
+  if (sv && sv.grid && !sv.over) { cont.hidden = false; cont.textContent = `Продолжить: ${sv.city}, ${dateText.call(null, sv.day)}`; }
+  else cont.hidden = true;
+  const bl = $('bestLbl');
+  if (best) { bl.hidden = false; bl.textContent = `Рекорд: ${termText(best.days)} — ${best.akim}, город ${best.city}`; }
+  else bl.hidden = true;
+}
+function beginPlay(intro) {
+  $('start').hidden = true;
+  modalOpen = false; speed = 1; savedSpeed = 1; tool = null; cat = 'home'; selTile = -1;
+  buildTabs(); buildItems(); setTool(null);
+  layout(); D = calc(); updateHud(); render();
+  if (intro) {
+    const goals = s.goals.map(g => `<div class="goal"><span class="mk wait">•</span><span>${esc(GOALS[g.id].label(g.target))}</span></div>`).join('');
+    openModal(`
+      <div class="tag">Аппарат акима области</div>
+      <h2>Добро пожаловать, ${esc(s.akim)}</h2>
+      <p>Вы возглавили город ${esc(s.city)}: ${fmtInt(s.pop)} жителей, школа, рынок, ТЭЦ и водоканал. В бюджете ${money(s.budget)}.</p>
+      <p>В городе нет поликлиники и полиции, жители этим недовольны. Начните с них.</p>
+      <div class="sec"><h3>Задачи на ${year()} год</h3>${goals}</div>
+      <p class="hint" style="margin-top:10px">Нажмите на любой показатель вверху, чтобы открыть сводку: финансы, охват служб, налоги и журнал.</p>
+      <div style="margin-top:16px"><button class="primary" id="introOk">Приступить к работе</button></div>`);
+    $('introOk').onclick = closeModal;
+  } else if (s.pending) showEvent();
+}
+
+$('rndCity').onclick = () => { $('cityName').value = pick(CITY_A) + pick(CITY_B); };
+$('btnNew').onclick = () => {
+  const akim = $('akimName').value.trim() || 'Аким';
+  let city = $('cityName').value.trim();
+  if (!city) { city = pick(CITY_A) + pick(CITY_B); $('cityName').value = city; }
+  newGame(akim, city); save(); beginPlay(true);
+};
+$('btnCont').onclick = () => { if (load(store.get(SAVE_KEY))) beginPlay(false); else showStart(); };
+$('toolCancel').onclick = () => { setTool(null); if (cat === 'demolish') { cat = 'home'; buildTabs(); buildItems(); } };
+document.querySelectorAll('.speeds button').forEach(b => b.onclick = () => { if (modalOpen) return; speed = +b.dataset.speed; updateHud(); });
+document.querySelectorAll('[data-open="sum"]').forEach(b => b.onclick = openSheet);
+cvs.addEventListener('click', e => {
+  if (modalOpen) return;
+  const r = cvs.getBoundingClientRect();
+  const x = Math.floor((e.clientX - r.left) / TS), y = Math.floor((e.clientY - r.top - OY) / TS);
+  if (x < 0 || y < 0 || x >= COLS || y >= ROWS) return;
+  tapTile(idx(x, y)); updateHud();
+});
+if (window.ResizeObserver) new ResizeObserver(() => { if (s) { layout(); render(); } }).observe($('mapWrap'));
+window.addEventListener('resize', () => { if (s) { layout(); render(); } });
+document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
+
+/* ---------- Главный цикл ---------- */
+let hudTimer = 0;
+function frame(now) {
+  const dt = Math.min(250, now - (lastT || now)); lastT = now;
+  if (s && !s.over && !modalOpen && speed > 0) {
+    acc += dt * speed;
+    while (acc >= DAY_MS && !modalOpen && !s.over) { acc -= DAY_MS; stepDay(); }
+  } else acc = 0;
+  if (s) {
+    render(now);
+    hudTimer += dt;
+    if (hudTimer > 200) { hudTimer = 0; updateHud(); }
+  }
+  requestAnimationFrame(frame);
+}
+
+function start(data) {
+  if (data && data.s && load(data.s)) beginPlay(false);
+  else showStart();
+  requestAnimationFrame(frame);
+}
+if (window.claude && window.claude.hot) window.claude.hot.snapshot(() => ({ s: s && !s.over ? s : null }));
+window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+})();
+</script>
+</body>
+</html>
