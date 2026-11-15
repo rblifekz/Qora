@@ -1,5 +1,6 @@
 import React from 'react';
 import {interpolate, useCurrentFrame, random} from 'remotion';
+import {useTxt} from '../lang';
 import {C, Pop, Big, at, clamp, fontFamily, usePop, Bill, Phone, Cam, ease, easeIn} from '../lib';
 import {ChapterBg, ChapterHead} from './Chapter';
 
@@ -19,7 +20,7 @@ const TARGET = {x: 540, y: 1155};
 const Dissolve: React.FC<{text: string; start: number}> = ({text, start}) => {
   const frame = useCurrentFrame();
   return (
-    <Big size={130}>
+    <Big size={text.length > 9 ? 108 : 130}>
       {text.split('').map((ch, i) => {
         const d = start + Math.floor(random(`l${i}`) * 14);
         const o = interpolate(frame, [d, d + 10], [1, 0.08], clamp);
@@ -36,6 +37,7 @@ const Dissolve: React.FC<{text: string; start: number}> = ({text, start}) => {
 
 export const S4: React.FC = () => {
   const frame = useCurrentFrame();
+  const tx = useTxt();
   const stackAt = T(18.38);
   const counts = [T(18.82), T(19.18), T(19.9), T(20.7), T(21.26)];
   const phoneAt = T(21.85);
@@ -143,10 +145,10 @@ export const S4: React.FC = () => {
           <ChapterHead n={2} title="" titleAt={9999} fly />
           {frame >= T(15.75) && (
             <Pop start={T(15.75)} style={{position: 'absolute', top: 440, left: 0, right: 0}}>
-              <Dissolve text="НЕВИДИМЫЕ" start={T(17.3)} />
+              <Dissolve text={tx.invisible} start={T(17.3)} />
               <div style={{marginTop: 30}}>
                 <Big size={70} color={C.gray}>
-                  деньги
+                  {tx.money}
                 </Big>
               </div>
             </Pop>
@@ -196,7 +198,7 @@ export const S4: React.FC = () => {
                     >
                       ✓
                     </div>
-                    <div style={{fontSize: 50, fontWeight: 800, color: C.white, opacity: paid}}>Оплачено</div>
+                    <div style={{fontSize: 50, fontWeight: 800, color: C.white, opacity: paid}}>{tx.paid}</div>
                     <div style={{fontSize: 40, fontWeight: 600, color: C.gray, opacity: paid}}>−10 000 ₸</div>
                   </div>
                   {/* кнопка + касание */}
@@ -219,7 +221,7 @@ export const S4: React.FC = () => {
                       transform: `scale(${ripple >= 0 && ripple < 6 ? 0.94 : 1})`,
                     }}
                   >
-                    Оплатить
+                    {tx.pay}
                   </div>
                   {ripple >= 0 && ripple < 20 && (
                     <div
@@ -247,9 +249,9 @@ export const S4: React.FC = () => {
         {frame >= calm && (
           <Pop start={calm} y={30} from={0.9} style={{position: 'absolute', top: 300, left: 0, right: 0}}>
             <Big size={118}>
-              ничего
+              {tx.nothing1}
               <br />
-              <span style={{color: C.green}}>не болит</span>
+              <span style={{color: C.green}}>{tx.nothing2}</span>
             </Big>
           </Pop>
         )}

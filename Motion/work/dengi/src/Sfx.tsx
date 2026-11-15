@@ -1,6 +1,7 @@
 import React from 'react';
-import {Audio, Sequence, staticFile} from 'remotion';
+import {Audio, Sequence, staticFile, interpolate, useVideoConfig} from 'remotion';
 import {FPS} from './lib';
+import {warp} from './lang';
 
 // [файл, секунда ролика, громкость] — эффекты заметно тише голоса
 const CUES: [string, number, number][] = [
@@ -51,13 +52,16 @@ const CUES: [string, number, number][] = [
   ['whoosh', 44.35, 0.3],
 ];
 
-export const Sfx: React.FC = () => (
+export const Sfx: React.FC = () => {
+  const {durationInFrames: d} = useVideoConfig();
+  return (
   <>
-    <Audio src={staticFile('sfx/drone.wav')} volume={0.22} />
+    <Audio src={staticFile('sfx/drone.wav')} volume={(f) => interpolate(f, [0, 45, d - 60, d], [0, 0.22, 0.22, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})} />
     {CUES.map(([f, t, v], i) => (
-      <Sequence key={i} from={Math.round(t * FPS)}>
+      <Sequence key={i} from={Math.round(warp(t) * FPS)}>
         <Audio src={staticFile(`sfx/${f}.wav`)} volume={v} />
       </Sequence>
     ))}
   </>
-);
+  );
+};

@@ -1,5 +1,6 @@
 import React from 'react';
 import {interpolate, useCurrentFrame} from 'remotion';
+import {useTxt, TXT, LANG} from '../lang';
 import {C, Pop, Big, at, clamp, fmt, fontFamily, usePop, useShake, Bill, Cam} from '../lib';
 import {ChapterBg, ChapterHead} from './Chapter';
 
@@ -26,7 +27,7 @@ const Tag: React.FC<{price: number; up: number}> = ({price, up}) => (
   >
     <div style={{position: 'absolute', left: 58, top: 128, width: 44, height: 44, borderRadius: '50%', background: C.card}} />
     <div style={{textAlign: 'right'}}>
-      <div style={{fontSize: 34, fontWeight: 700, color: '#77746C', letterSpacing: 3}}>ЦЕНА</div>
+      <div style={{fontSize: 34, fontWeight: 700, color: '#77746C', letterSpacing: 3}}>{TXT[LANG.current].tagPrice}</div>
       <div
         style={{
           fontSize: 130,
@@ -44,10 +45,12 @@ const Tag: React.FC<{price: number; up: number}> = ({price, up}) => (
 );
 
 const ITEMS = ['#E9B44C', '#D9604C', '#6FB3E0', '#9BCB6B', '#C98BD9'];
-const NAMES = ['хлеб', 'мясо', 'молоко', 'овощи', 'сладкое'];
+
 
 export const S3: React.FC = () => {
   const frame = useCurrentFrame();
+  const tx = useTxt();
+  const NAMES = tx.goods;
   const tagIn = T(9.98);
   const upP = interpolate(frame, [T(10.38), T(12.38)], [0, 1], clamp);
   const price = 1000 + Math.round(92 * upP);
@@ -62,7 +65,7 @@ export const S3: React.FC = () => {
     <ChapterBg>
       <Cam dur={T(S3_END)} to={1.05}>
         <div style={{position: 'absolute', inset: 0, transform: `translate(${shake.x}px, ${shake.y}px)`}}>
-          <ChapterHead n={1} title="Цены" titleAt={T(8.55)} />
+          <ChapterHead n={1} title={tx.prices} titleAt={T(8.55)} />
 
           {/* ценник */}
           {frame >= tagIn && (
@@ -94,7 +97,7 @@ export const S3: React.FC = () => {
                 marginTop: 6,
               }}
             >
-              инфляция за год · БНС РК, окт. 2026: 9,2%
+              {tx.source}
             </div>
           </Pop>
 
@@ -134,8 +137,8 @@ export const S3: React.FC = () => {
                 })}
               </Pop>
               <Pop start={T(14.33)} style={{position: 'absolute', top: 1160, left: 0, right: 0}}>
-                <Big size={96}>
-                  меньше <span style={{color: C.red}}>покупок</span>
+                <Big size={(tx.fewer1 + tx.fewer2).length > 14 ? 80 : 96}>
+                  {tx.fewer1} <span style={{color: C.red}}>{tx.fewer2}</span>
                 </Big>
               </Pop>
             </>

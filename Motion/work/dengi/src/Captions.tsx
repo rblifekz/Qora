@@ -1,11 +1,14 @@
 import React from 'react';
 import {useCurrentFrame, interpolate} from 'remotion';
-import data from '../words.json';
+import dataRu from '../words.json';
+import dataKk from '../words_kk.json';
+import {LANG, Lang} from './lang';
 import {C, FPS, VOICE_OFFSET, fontFamily, clamp} from './lib';
 
 type W = {text: string; start: number; end: number};
 
-const words: W[] = (data as {words: W[]}).words
+const build = (data: {words: W[]}) => {
+const words: W[] = data.words
   .filter((w) => !w.text.startsWith('[') && !w.text.endsWith(']') && w.text !== '—')
   .map((w) => ({...w, start: w.start + VOICE_OFFSET, end: w.end + VOICE_OFFSET}));
 
@@ -20,12 +23,16 @@ for (const w of words) {
   }
 }
 if (cur.length) chunks.push(cur);
+return chunks;
+};
+const CHUNKS: Record<Lang, W[][]> = {ru: build(dataRu as any), kk: build(dataKk as any)};
 
 const clean = (t: string) => t.replace(/[.,:!?…]+$/g, '').replace(/…/g, '');
 
 export const Captions: React.FC = () => {
   const frame = useCurrentFrame();
   const t = frame / FPS;
+  const chunks = CHUNKS[LANG.current];
   const idx = chunks.findIndex((c, i) => {
     const next = chunks[i + 1];
     const endT = next ? Math.min(next[0].start, c[c.length - 1].end + 0.5) : c[c.length - 1].end + 0.5;

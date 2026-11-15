@@ -9,6 +9,7 @@ import {
   Easing,
 } from 'remotion';
 import {continueRender, delayRender, staticFile} from 'remotion';
+import {warp, TXT, LANG} from './lang';
 
 // Manrope (SIL OFL) — локальные файлы, кириллица + казахские буквы
 export const fontFamily = 'ManropeLocal';
@@ -34,7 +35,6 @@ if (typeof document !== 'undefined' && !(window as any).__manrope) {
 
 export const FPS = 30;
 export const VOICE_OFFSET = 0.3; // голос стартует с 0,3 с ролика
-export const TOTAL = 45; // секунд
 
 export const C = {
   bg: '#0A0A0C',
@@ -51,7 +51,7 @@ export const C = {
 
 /** секунды ролика -> кадр внутри сцены, начавшейся в sceneStart */
 export const at = (sec: number, sceneStart: number) =>
-  Math.round((sec - sceneStart) * FPS);
+  Math.round((warp(sec) - warp(sceneStart)) * FPS);
 
 export const fmt = (n: number) =>
   String(Math.round(Math.abs(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
@@ -148,7 +148,7 @@ export const Notif: React.FC<{
   width?: number;
   compact?: boolean;
   glow?: number;
-}> = ({title, body, icon = '₸', color = C.green, app = 'Банк', width = 920, compact, glow = 0}) => (
+}> = ({title, body, icon = '₸', color = C.green, app = TXT[LANG.current].app, width = 920, compact, glow = 0}) => (
   <div
     style={{
       width,
@@ -191,7 +191,7 @@ export const Notif: React.FC<{
         }}
       >
         <span>{app}</span>
-        <span>сейчас</span>
+        <span>{TXT[LANG.current].now}</span>
       </div>
       <div style={{color: '#fff', fontSize: compact ? 36 : 42, fontWeight: 700, marginTop: 2}}>{title}</div>
       {body && (

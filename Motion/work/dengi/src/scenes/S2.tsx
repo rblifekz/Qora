@@ -1,5 +1,6 @@
 import React from 'react';
 import {AbsoluteFill, interpolate, useCurrentFrame} from 'remotion';
+import {useTxt} from '../lang';
 import {C, Pop, Big, at, clamp, usePop, fontFamily, ease} from '../lib';
 
 export const S2_START = 4.9;
@@ -36,6 +37,7 @@ export const Card: React.FC<{n: number; label?: string; open?: boolean}> = ({n, 
 // «Раньше так не было. И дело не только в тебе» → три карточки
 export const S2: React.FC = () => {
   const frame = useCurrentFrame();
+  const tx = useTxt();
   const zoomStart = T(8.05);
   const z = interpolate(frame, [zoomStart, T(S2_END)], [0, 1], {...clamp, easing: ease});
   const zeroOut = interpolate(frame, [0, 8], [1, 0], clamp);
@@ -63,16 +65,16 @@ export const S2: React.FC = () => {
 
       <Pop start={T(5.02)} end={T(6.3)} style={{position: 'absolute', top: 600, left: 0, right: 0}}>
         <Big size={130} color={C.gray}>
-          Раньше
+          {tx.before1}
         </Big>
-        <Big size={130}>так не было</Big>
+        <Big size={tx.before2.length > 12 ? 104 : 130}>{tx.before2}</Big>
       </Pop>
 
       <Pop start={T(6.58)} style={{position: 'absolute', top: 400, left: 0, right: 0}}>
         <div style={{opacity: 1 - z}}>
-          <Big size={92}>не только</Big>
+          <Big size={92}>{tx.notOnly1}</Big>
           <Big size={92} color={C.green}>
-            в тебе
+            {tx.notOnly2}
           </Big>
         </div>
       </Pop>

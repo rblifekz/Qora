@@ -1,6 +1,7 @@
 import React from 'react';
 import {AbsoluteFill, Audio, Sequence, staticFile, interpolate, useCurrentFrame} from 'remotion';
 import {C, FPS, VOICE_OFFSET, Grain} from './lib';
+import {LANG, Lang, warp} from './lang';
 import {Captions} from './Captions';
 import {Sfx} from './Sfx';
 import {S1, S1_START, S1_END} from './scenes/S1';
@@ -28,11 +29,13 @@ const scenes = [
   [S7, S7_START, S7_END],
 ] as const;
 
-export const Video: React.FC = () => (
+export const Video: React.FC<{lang: Lang}> = ({lang}) => {
+  LANG.current = lang;
+  return (
   <AbsoluteFill style={{background: C.bg}}>
     {scenes.map(([Comp, s, e], i) => (
-      <Sequence key={i} from={Math.round(s * FPS)} durationInFrames={Math.round((e - s) * FPS)}>
-        <FadeOut dur={Math.round((e - s) * FPS)} on={i >= 2 && i <= 4}>
+      <Sequence key={i} from={Math.round(warp(s) * FPS)} durationInFrames={Math.round(warp(e) * FPS) - Math.round(warp(s) * FPS)}>
+        <FadeOut dur={Math.round(warp(e) * FPS) - Math.round(warp(s) * FPS)} on={i >= 2 && i <= 4}>
           <Comp />
         </FadeOut>
       </Sequence>
@@ -41,7 +44,8 @@ export const Video: React.FC = () => (
     <Grain />
     <Sfx />
     <Sequence from={Math.round(VOICE_OFFSET * FPS)}>
-      <Audio src={staticFile('voice.mp3')} />
+      <Audio src={staticFile(lang === 'kk' ? 'voice_kk.mp3' : 'voice.mp3')} />
     </Sequence>
   </AbsoluteFill>
-);
+  );
+};

@@ -1,18 +1,21 @@
 import React from 'react';
 import {AbsoluteFill, interpolate, useCurrentFrame} from 'remotion';
+import {useTxt} from '../lang';
 import {C, Pop, Big, at, clamp, fontFamily, Notif, ease, Cam} from '../lib';
 
 export const S7_START = 40.5;
 export const S7_END = 45.0;
 const T = (s: number) => at(s, S7_START);
 
-const TYPED = 'у меня 3 дня…';
 
 export const S7: React.FC = () => {
   const frame = useCurrentFrame();
+  const tx = useTxt();
+  const TYPED = tx.typed;
   const boxAt = T(42.6);
   const typeStart = T(42.95);
-  const chars = Math.max(0, Math.min(TYPED.length, Math.floor((frame - typeStart) / 2)));
+  const perChar = Math.max(1, Math.min(2, (T(43.75) - typeStart) / TYPED.length));
+  const chars = Math.max(0, Math.min(TYPED.length, Math.floor((frame - typeStart) / perChar)));
   const fade = interpolate(frame, [T(43.9), T(44.3)], [1, 0], clamp);
   // петля: уведомление падает и встаёт ровно туда, где оно на кадре 0
   const loopP = interpolate(frame, [T(44.35), T(45.0) - 1], [0, 1], {...clamp, easing: ease});
@@ -22,14 +25,14 @@ export const S7: React.FC = () => {
       <AbsoluteFill style={{opacity: fade}}>
         <Cam dur={T(S7_END)} to={1.05}>
           <Pop start={T(40.62)} style={{position: 'absolute', top: 360, left: 0, right: 0}}>
-            <Big size={128}>за сколько</Big>
+            <Big size={128}>{tx.howMany1}</Big>
             <Big size={210} color={C.green}>
-              дней?
+              {tx.howMany2}
             </Big>
           </Pop>
           <Pop start={T(41.54)} style={{position: 'absolute', top: 760, left: 0, right: 0}}>
             <Big size={70} color={C.gray}>
-              уходит твоя зарплата
+              {tx.goes}
             </Big>
           </Pop>
           {frame >= boxAt && (
@@ -48,7 +51,7 @@ export const S7: React.FC = () => {
               >
                 <div style={{width: 70, height: 70, borderRadius: '50%', background: `linear-gradient(135deg, ${C.green}, #1C8C4E)`}} />
                 <div style={{fontSize: 46, fontWeight: 600, color: chars ? C.white : C.gray}}>
-                  {chars ? TYPED.slice(0, chars) : 'Добавить комментарий…'}
+                  {chars ? TYPED.slice(0, chars) : tx.addComment}
                   <span style={{opacity: cursor ? 1 : 0, color: C.green}}>|</span>
                 </div>
               </div>
@@ -65,7 +68,7 @@ export const S7: React.FC = () => {
             opacity: Math.min(1, loopP * 3),
           }}
         >
-          <Notif title="Зачисление +250 000 ₸" body="Заработная плата" glow={loopP} />
+          <Notif title={tx.income} body={tx.salaryBody} glow={loopP} />
         </div>
       )}
     </AbsoluteFill>

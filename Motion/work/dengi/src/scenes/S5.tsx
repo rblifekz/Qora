@@ -1,5 +1,6 @@
 import React from 'react';
 import {interpolate, useCurrentFrame, random} from 'remotion';
+import {useTxt, TXT, LANG} from '../lang';
 import {C, Pop, Big, at, clamp, fmt, fontFamily, Notif, ease, Cam} from '../lib';
 import {ChapterBg, ChapterHead} from './Chapter';
 
@@ -14,7 +15,6 @@ const FIRST = [
   {t: 29.78, title: 'Подписка −2 990 ₸', body: 'Автосписание', icon: 'П'},
   {t: 30.38, title: 'Рассрочка −18 500 ₸', body: 'Платёж 4 из 12', icon: 'Р'},
 ];
-const LABELS = ['Такси', 'Кофе', 'Доставка', 'Подписка', 'Рассрочка', 'Перевод', 'Магазин', 'Аптека', 'Заказ'];
 const AMOUNTS = [890, 1290, 1990, 2490, 3490, 4990, 6500, 9900, 12000, 15000];
 const RAIN_N = 30;
 const ROW = 150;
@@ -22,9 +22,11 @@ const TOP = 300;
 
 export const S5: React.FC = () => {
   const frame = useCurrentFrame();
+  const tx = useTxt();
+  const LABELS = tx.labels;
   const rainAt = T(33.17);
   const items = [
-    ...FIRST.map((f) => ({...f, at: T(f.t)})),
+    ...FIRST.map((f, i) => ({...f, ...tx.first[i], at: T(f.t)})),
     ...new Array(RAIN_N).fill(0).map((_, i) => {
       const a = AMOUNTS[Math.floor(random(`a${i}`) * AMOUNTS.length)];
       const l = LABELS[Math.floor(random(`l${i}`) * LABELS.length)];
@@ -49,7 +51,7 @@ export const S5: React.FC = () => {
     <ChapterBg fly>
       <Cam dur={T(S5_END)} to={1.03}>
         <div style={{opacity: headOut}}>
-          <ChapterHead n={3} title="Мелочь" titleAt={T(25.4)} fly />
+          <ChapterHead n={3} title={tx.small} titleAt={T(25.4)} fly />
         </div>
 
         <div
@@ -93,7 +95,7 @@ export const S5: React.FC = () => {
           const st = T(f.t);
           const next = i < FIRST.length - 1 ? T(FIRST[i + 1].t) : T(31.2);
           if (frame < st || frame >= next) return null;
-          const word = ['−2 000', '−5 000', 'доставка', 'подписки', 'рассрочка'][i];
+          const word = tx.bigWords[i];
           return (
             <Pop key={i} start={st} from={1.4} y={0} style={{position: 'absolute', top: 1100, left: 0, right: 0}}>
               <Big size={i < 2 ? 170 : 120} color={i < 2 ? C.red : C.white}>
@@ -106,7 +108,7 @@ export const S5: React.FC = () => {
         {focus > 0.01 && (
           <div style={{position: 'absolute', top: 1180, left: 0, right: 0, opacity: focus}}>
             <Big size={120} color={C.gray}>
-              ерунда?
+              {tx.trifle}
             </Big>
           </div>
         )}
@@ -136,7 +138,7 @@ export const S5: React.FC = () => {
               }}
             >
               <div style={{fontSize: 46, fontWeight: 700, color: C.gray, letterSpacing: 4}}>
-                {frame >= T(34.7) ? 'ТВОЯ ЗАРПЛАТА' : 'ВМЕСТЕ'}
+                {frame >= T(34.7) ? tx.yourSalary : tx.together}
               </div>
               <div
                 style={{

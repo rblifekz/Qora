@@ -1,16 +1,18 @@
 import React from 'react';
 import {AbsoluteFill, interpolate, useCurrentFrame} from 'remotion';
+import {useTxt} from '../lang';
 import {C, Pop, Big, at, clamp, fontFamily, Bill, usePop, Cam, easeIn} from '../lib';
 
 export const S6_START = 36.0;
 export const S6_END = 40.5;
 const T = (s: number) => at(s, S6_START);
 
-const DAYS = ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'];
-const WHERE = ['еда', 'такси', 'кофе', 'доставка', 'подарок'];
 
 export const S6: React.FC = () => {
   const frame = useCurrentFrame();
+  const tx = useTxt();
+  const DAYS = tx.days7;
+  const WHERE = tx.where;
   const cashAt = T(37.6);
   const seeAt = T(38.54);
   const flyAt = T(39.3);
@@ -23,7 +25,7 @@ export const S6: React.FC = () => {
       <Cam dur={T(S6_END)} to={1.06}>
         <Pop start={T(36.1)} style={{position: 'absolute', top: 290, left: 0, right: 0}}>
           <Big size={150}>
-            <span style={{color: C.green}}>1</span> неделя
+            <span style={{color: C.green}}>1</span> {tx.week}
           </Big>
         </Pop>
         <div style={{position: 'absolute', top: 470, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 14}}>
@@ -57,7 +59,7 @@ export const S6: React.FC = () => {
         </div>
         <Pop start={T(37.42)} style={{position: 'absolute', top: 640, left: 0, right: 0}}>
           <Big size={92} color={C.gray}>
-            только <span style={{color: C.white}}>наличка</span>
+            {tx.only1} <span style={{color: C.white}}>{tx.only2}</span>
           </Big>
         </Pop>
 
